@@ -57,7 +57,8 @@ nano config.json
   "username": "your_username",
   "password": "your_password",
   "renew_interval_minutes": 15,
-  "headless": true
+  "headless": true,
+  "test_mode": true
 }
 ```
 
@@ -67,24 +68,52 @@ nano config.json
 - `password`: 你的 MCHost 密码
 - `renew_interval_minutes`: 自动续期间隔（分钟），默认 15
 - `headless`: 是否无头模式运行（VPS 上必须为 true）
+- `test_mode`: 测试模式（true=只测试登录，false=正式运行）
 
-### 4️⃣ 测试运行
+### 4️⃣ 测试登录
 
-先手动测试一次，确保脚本能正常工作：
+**重要：首次运行请使用测试模式！**
+
+确保 `config.json` 中 `test_mode` 为 `true`，然后运行：
 
 ```bash
 ./venv/bin/python mchost_renew.py
 ```
 
-观察输出日志，确认能够：
-- ✓ 成功访问登录页面
-- ✓ 通过 Cloudflare 验证
-- ✓ 成功登录
-- ✓ 找到并点击 Renew 按钮
+测试模式下，脚本会：
+1. ✓ 访问登录页面
+2. ✓ 通过 Cloudflare 验证
+3. ✓ 自动登录
+4. ✓ 查找 Renew 按钮
+5. ✓ 保存登录成功截图到 `/tmp/mchost_login_success.png`
+6. ✓ 退出（不进入自动续期循环）
 
-如果遇到问题，检查 `/tmp/mchost_*.png` 截图文件进行调试。
+**查看截图确认登录成功**：
 
-按 `Ctrl + C` 停止测试。
+```bash
+# 下载截图到本地查看
+scp root@your-server-ip:/tmp/mchost_login_success.png ./
+
+# 或者使用其他方式查看
+```
+
+如果登录失败，检查以下截图进行调试：
+- `/tmp/mchost_error.png` - 整体错误
+- `/tmp/mchost_no_username.png` - 找不到用户名框
+- `/tmp/mchost_no_password.png` - 找不到密码框
+- `/tmp/mchost_no_button.png` - 找不到登录按钮
+- `/tmp/mchost_login_failed.png` - 登录失败
+
+**确认登录成功后，切换到正式模式**：
+
+编辑 `config.json`，将 `test_mode` 改为 `false`：
+
+```bash
+nano config.json
+# 修改: "test_mode": false
+```
+
+然后再次运行，脚本将进入自动续期循环。
 
 ### 5️⃣ 安装为系统服务（可选但推荐）
 

@@ -221,11 +221,17 @@ class MCHostRenewer:
             try:
                 await self.page.wait_for_selector('#renewSessionBtn', timeout=10000)
                 logger.info("✓ 登录成功！")
+
+                # 保存成功登录后的截图
+                screenshot_path = '/tmp/mchost_login_success.png'
+                await self.page.screenshot(path=screenshot_path, full_page=True)
+                logger.info(f"✓ 已保存登录成功截图到: {screenshot_path}")
+
                 return True
             except PlaywrightTimeoutError:
                 logger.warning("未找到Renew按钮，可能登录失败")
                 # 保存截图用于调试
-                await self.page.screenshot(path='/tmp/mchost_login_failed.png')
+                await self.page.screenshot(path='/tmp/mchost_login_failed.png', full_page=True)
                 logger.info("已保存截图到: /tmp/mchost_login_failed.png")
                 return False
 
@@ -269,6 +275,17 @@ class MCHostRenewer:
             # 登录
             if not await self.login():
                 logger.error("登录失败，退出程序")
+                return
+
+            # 检查是否为测试模式
+            test_mode = self.config.get('test_mode', False)
+            if test_mode:
+                logger.info("=" * 50)
+                logger.info("测试模式：登录成功，即将退出")
+                logger.info("请查看截图: /tmp/mchost_login_success.png")
+                logger.info("确认无误后，将 config.json 中的 test_mode 改为 false")
+                logger.info("=" * 50)
+                await asyncio.sleep(3)  # 等待3秒让用户看到消息
                 return
 
             # 主循环：每15分钟点击一次Renew
