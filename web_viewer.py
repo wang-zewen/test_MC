@@ -286,8 +286,8 @@ TASK_LIST_TEMPLATE = '''
         {% endif %}
     </div>
     <script>
-        // Auto refresh every 30 seconds
-        setTimeout(() => location.reload(), 30000);
+        // Auto refresh every 5 seconds (faster refresh for task list)
+        setTimeout(() => location.reload(), 5000);
     </script>
 </body>
 </html>
@@ -496,8 +496,8 @@ TASK_DETAIL_TEMPLATE = '''
         function closeLightbox() {
             document.getElementById('lightbox').style.display = 'none';
         }
-        // Auto refresh every 30 seconds
-        setTimeout(() => location.reload(), 30000);
+        // Auto refresh every 5 seconds (faster refresh for quicker updates)
+        setTimeout(() => location.reload(), 5000);
     </script>
 </body>
 </html>
@@ -928,7 +928,10 @@ def delete_task(task_id):
 @require_auth
 def trigger_screenshot(task_id):
     """触发立即截图"""
+    import time
     task_manager.trigger_action(task_id, 'screenshot')
+    # 等待3秒让后台处理（最多等待2秒检测到信号 + 1秒截图）
+    time.sleep(3)
     return redirect(url_for('task_detail', task_id=task_id))
 
 
@@ -936,7 +939,10 @@ def trigger_screenshot(task_id):
 @require_auth
 def trigger_renew_now(task_id):
     """触发立即Renew"""
+    import time
     task_manager.trigger_action(task_id, 'renew_now')
+    # 等待5秒让后台处理（最多等待2秒检测 + 3秒Renew+截图）
+    time.sleep(5)
     return redirect(url_for('task_detail', task_id=task_id))
 
 
@@ -944,8 +950,11 @@ def trigger_renew_now(task_id):
 @require_auth
 def trigger_renew_delayed(task_id):
     """触发延迟Renew"""
+    import time
     delay_minutes = int(request.form.get('delay_minutes', 5))
     task_manager.trigger_action(task_id, 'renew_delayed', delay_minutes=delay_minutes)
+    # 等待2秒让后台处理信号
+    time.sleep(2)
     return redirect(url_for('task_detail', task_id=task_id))
 
 
