@@ -58,67 +58,104 @@ class MCHostRenewer:
 
     async def init_browser(self):
         """初始化浏览器"""
-        playwright = await async_playwright().start()
+        self.playwright = await async_playwright().start()
 
         # 启动浏览器（使用chromium，headless模式）
-        self.browser = await playwright.chromium.launch(
+        self.browser = await self.playwright.chromium.launch(
             headless=self.config.get('headless', True),
             args=[
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-blink-features=AutomationControlled'
+                '--disable-blink-features=AutomationControlled',
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process'
             ]
         )
 
         # 创建上下文，添加反检测配置
         self.context = await self.browser.new_context(
             viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            locale='zh-CN',
+            timezone_id='Asia/Shanghai'
         )
 
-        # 添加stealth脚本
+        # 添加更完整的stealth脚本
         await self.context.add_init_script("""
+            // 移除webdriver标识
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
             });
+
+            // 修改plugins
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5]
+            });
+
+            // 修改languages
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['zh-CN', 'zh', 'en']
+            });
+
+            // 覆盖chrome runtime
+            window.chrome = {
+                runtime: {}
+            };
         """)
 
         self.page = await self.context.new_page()
+
+        # 设置额外的超时时间
+        self.page.set_default_timeout(60000)
+
         logger.info("浏览器初始化成功")
 
     async def login(self):
         """登录MCHost"""
         try:
             logger.info(f"正在访问登录页面: {self.config['mchost_url']}")
-            await self.page.goto(self.config['mchost_url'], wait_until='networkidle')
+
+            # 使用更宽松的加载策略，不等待networkidle
+            try:
+                await self.page.goto(self.config['mchost_url'], wait_until='domcontentloaded', timeout=60000)
+            except PlaywrightTimeoutError:
+                logger.warning("页面加载超时，但继续尝试...")
 
             # 等待Cloudflare验证完成（如果有）
             logger.info("等待页面加载完成（可能需要通过Cloudflare验证）...")
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)  # 增加等待时间让Cloudflare完成验证
 
             # 查找并填写用户名
             logger.info("正在填写登录信息...")
             username_selectors = [
                 'input[name="username"]',
+                'input[name="email"]',
+                'input[type="email"]',
                 'input[type="text"]',
                 'input[placeholder*="用户名"]',
                 'input[placeholder*="username"]',
-                '#username'
+                'input[placeholder*="email"]',
+                'input[placeholder*="Email"]',
+                '#username',
+                '#email'
             ]
 
             username_filled = False
             for selector in username_selectors:
                 try:
-                    await self.page.wait_for_selector(selector, timeout=2000)
+                    await self.page.wait_for_selector(selector, timeout=5000, state='visible')
                     await self.page.fill(selector, self.config['username'])
                     username_filled = True
-                    logger.info(f"使用选择器填写用户名: {selector}")
+                    logger.info(f"✓ 使用选择器填写用户名: {selector}")
                     break
                 except:
                     continue
 
             if not username_filled:
+                # 保存截图用于调试
+                await self.page.screenshot(path='/tmp/mchost_no_username.png')
+                logger.error("已保存截图到: /tmp/mchost_no_username.png")
                 raise Exception("无法找到用户名输入框")
 
             # 查找并填写密码
@@ -131,19 +168,22 @@ class MCHostRenewer:
             password_filled = False
             for selector in password_selectors:
                 try:
-                    await self.page.wait_for_selector(selector, timeout=2000)
+                    await self.page.wait_for_selector(selector, timeout=5000, state='visible')
                     await self.page.fill(selector, self.config['password'])
                     password_filled = True
-                    logger.info(f"使用选择器填写密码: {selector}")
+                    logger.info(f"✓ 使用选择器填写密码: {selector}")
                     break
                 except:
                     continue
 
             if not password_filled:
+                await self.page.screenshot(path='/tmp/mchost_no_password.png')
+                logger.error("已保存截图到: /tmp/mchost_no_password.png")
                 raise Exception("无法找到密码输入框")
 
             # 等待Cloudflare验证（如果登录表单中有）
-            await asyncio.sleep(3)
+            logger.info("等待验证码检查...")
+            await asyncio.sleep(5)
 
             # 查找并点击登录按钮
             login_button_selectors = [
@@ -151,25 +191,31 @@ class MCHostRenewer:
                 'input[type="submit"]',
                 'button:has-text("登录")',
                 'button:has-text("Login")',
-                'button:has-text("Sign In")'
+                'button:has-text("Sign In")',
+                'button:has-text("Sign in")',
+                'button:has-text("Log in")',
+                'button.btn',
+                'input.btn[type="submit"]'
             ]
 
             login_clicked = False
             for selector in login_button_selectors:
                 try:
-                    await self.page.click(selector, timeout=2000)
+                    await self.page.click(selector, timeout=3000)
                     login_clicked = True
-                    logger.info(f"点击登录按钮: {selector}")
+                    logger.info(f"✓ 点击登录按钮: {selector}")
                     break
                 except:
                     continue
 
             if not login_clicked:
+                await self.page.screenshot(path='/tmp/mchost_no_button.png')
+                logger.error("已保存截图到: /tmp/mchost_no_button.png")
                 raise Exception("无法找到登录按钮")
 
             # 等待登录完成
             logger.info("等待登录完成...")
-            await asyncio.sleep(5)
+            await asyncio.sleep(8)
 
             # 检查是否成功登录（通过查找Renew按钮）
             try:
@@ -251,9 +297,16 @@ class MCHostRenewer:
 
     async def cleanup(self):
         """清理资源"""
-        if self.browser:
-            await self.browser.close()
+        try:
+            if self.context:
+                await self.context.close()
+            if self.browser:
+                await self.browser.close()
+            if hasattr(self, 'playwright') and self.playwright:
+                await self.playwright.stop()
             logger.info("浏览器已关闭")
+        except Exception as e:
+            logger.warning(f"清理资源时出错: {e}")
 
 
 async def main():
