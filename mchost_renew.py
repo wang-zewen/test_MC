@@ -40,7 +40,8 @@ class MCHostRenewer:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
 
-            required_fields = ['mchost_url', 'username', 'password']
+            # 只检查必需的URL字段，不再需要用户名密码（使用cookies登录）
+            required_fields = ['mchost_url']
             for field in required_fields:
                 if field not in config:
                     raise ValueError(f"配置文件缺少必填字段: {field}")
