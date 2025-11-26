@@ -68,47 +68,102 @@ nano config.json
 
 **注意**：
 - ❌ 不再需要在配置文件中填写用户名和密码！
-- ✅ 首次运行会打开浏览器窗口，你手动登录
+- ✅ 首次需要手动登录一次
 - ✅ 登录后会自动保存会话到 `cookies.json`
 - ✅ 后续运行自动使用保存的会话，无需再次登录
 
-### 4️⃣ 首次手动登录（重要！）
+### 4️⃣ 首次登录（选择一种方式）
 
-**首次运行会打开浏览器窗口，需要你手动登录**
+由于 VPS 通常没有图形界面，你需要选择以下方式之一完成首次登录：
 
-确保 `config.json` 中：
-- `test_mode` 为 `true`（测试模式）
-- `headless` 为 `false`（显示浏览器窗口）
+#### 🌟 方式A：在本地电脑登录（推荐）
 
-然后运行：
+**适用于**：你的本地电脑（Windows/Mac/Linux）有浏览器
+
+1️⃣ **在本地电脑克隆项目**：
 
 ```bash
+git clone <your-repo-url>
+cd test_MC
+```
+
+2️⃣ **安装依赖**（只需 playwright）：
+
+```bash
+# 安装 Python 和 pip（如果没有）
+# Windows: 从 python.org 下载安装
+# Mac: brew install python3
+# Linux: sudo apt-get install python3 python3-pip
+
+# 安装 playwright
+pip3 install playwright
+playwright install chromium
+```
+
+3️⃣ **运行本地登录脚本**：
+
+```bash
+python3 local_login.py
+```
+
+脚本会：
+- 打开浏览器窗口
+- 等待你手动登录（填写账号、完成CF验证）
+- 自动检测登录成功
+- 保存 `cookies.json`
+
+4️⃣ **上传 cookies 到服务器**：
+
+```bash
+scp cookies.json root@你的服务器IP:/root/test_MC/
+```
+
+5️⃣ **在服务器上配置并运行**：
+
+```bash
+# SSH 到服务器
+ssh root@你的服务器IP
+
+# 进入项目目录
+cd /root/test_MC
+
+# 修改配置
+nano config.json
+# 设置: "headless": true, "test_mode": false
+
+# 运行脚本
 ./venv/bin/python mchost_renew.py
 ```
 
-**接下来会发生什么**：
+✅ **完成！** 脚本将自动使用 cookies 登录并开始自动续期。
 
-1. **浏览器窗口会自动打开**，显示 MCHost 登录页面
-2. **在浏览器中手动操作**：
-   - 填写你的用户名和密码
-   - 完成 Cloudflare 人机验证（点击复选框）
-   - 点击登录按钮
-3. **等待登录成功** - 脚本会自动检测
-4. **会话自动保存** - 保存到 `cookies.json`
-5. **截图保存** - `/tmp/mchost_login_success.png`
-6. **测试模式退出** - 确认成功后退出
+---
 
-**重要提示**：
-- ⏱️ 请在 **5 分钟内**完成登录操作
-- 👀 脚本会每 3 秒检测一次登录状态
-- ✅ 看到 "检测到登录成功" 提示即可
+#### 方式B：在 VPS 上使用虚拟显示（不推荐 - 复杂且看不到窗口）
 
-**查看登录成功截图**：
+VPS 没有图形界面，需要使用 xvfb（虚拟显示服务器）：
 
 ```bash
-# 在本地电脑运行，下载截图查看
-scp root@your-server-ip:/tmp/mchost_login_success.png ./
+# 安装 xvfb
+sudo apt-get install -y xvfb
+
+# 确保配置
+nano config.json
+# 设置: "headless": false, "test_mode": true
+
+# 使用 xvfb 运行
+xvfb-run -a /root/test_MC/venv/bin/python /root/test_MC/mchost_renew.py
 ```
+
+**缺点**：
+- ❌ 你看不到浏览器窗口
+- ❌ 无法人工验证 Cloudflare
+- ❌ 只能通过截图判断状态
+- ❌ 调试困难
+
+⚠️ **强烈建议使用方式A（本地登录）**，更简单可靠。
+
+---
 
 ### 5️⃣ 切换到正式运行模式
 
