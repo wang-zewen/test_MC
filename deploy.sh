@@ -47,7 +47,7 @@ fi
 echo -e "${GREEN}[5/7]${NC} 安装 Python 依赖包..."
 source venv/bin/activate
 pip install --upgrade pip -q
-pip install playwright
+pip install playwright flask
 
 # 安装Playwright浏览器和系统依赖
 echo -e "${GREEN}[6/7]${NC} 安装 Chromium 浏览器和系统依赖（可能需要几分钟）..."

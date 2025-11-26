@@ -1,0 +1,21 @@
+[Unit]
+Description=MCHost Renew Web Viewer
+After=network.target
+
+[Service]
+Type=simple
+User=%USER%
+WorkingDirectory=%SCRIPT_DIR%
+ExecStart=%SCRIPT_DIR%/venv/bin/python %SCRIPT_DIR%/web_viewer.py
+Restart=always
+RestartSec=60
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+
+# 环境变量
+Environment="VIEWER_PASSWORD=mchost123"
+
+[Install]
+WantedBy=multi-user.target

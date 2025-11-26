@@ -2,6 +2,9 @@
 config.json
 cookies.json
 
+# 截图目录
+screenshots/
+
 # Python虚拟环境
 venv/
 __pycache__/

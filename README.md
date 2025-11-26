@@ -205,6 +205,84 @@ chmod +x install_service.sh
 bash install_service.sh
 ```
 
+## Web 监控界面
+
+脚本提供了一个 Web 界面，可以远程查看 Renew 截图和日志。
+
+### 启动 Web Viewer
+
+#### 方式 1: 手动运行（用于测试）
+
+```bash
+./venv/bin/python web_viewer.py
+```
+
+然后访问: `http://你的服务器IP:5000`
+
+默认密码: `mchost123`
+
+#### 方式 2: 安装为系统服务（推荐）
+
+```bash
+chmod +x install_viewer.sh
+bash install_viewer.sh
+```
+
+安装过程中可以设置自定义密码（直接回车使用默认密码）。
+
+### Web Viewer 功能
+
+- 📸 **截图查看**: 自动显示最近 20 张 Renew 截图
+- 📋 **日志查看**: 实时显示最近 100 行日志
+- 🔄 **自动刷新**: 每 30 秒自动刷新页面
+- 🔐 **密码保护**: 防止未授权访问
+- 🖼️ **Lightbox**: 点击截图可全屏查看
+
+### 修改 Web Viewer 密码
+
+**方法 1: 通过环境变量**（推荐）
+
+编辑服务文件:
+```bash
+sudo nano /etc/systemd/system/mchost-viewer.service
+```
+
+修改这一行:
+```ini
+Environment="VIEWER_PASSWORD=你的新密码"
+```
+
+重启服务:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart mchost-viewer
+```
+
+**方法 2: 启动时指定**
+
+```bash
+VIEWER_PASSWORD=你的密码 ./venv/bin/python web_viewer.py
+```
+
+### Web Viewer 服务管理
+
+```bash
+# 查看状态
+sudo systemctl status mchost-viewer
+
+# 启动服务
+sudo systemctl start mchost-viewer
+
+# 停止服务
+sudo systemctl stop mchost-viewer
+
+# 重启服务
+sudo systemctl restart mchost-viewer
+
+# 查看日志
+sudo journalctl -u mchost-viewer -f
+```
+
 ## 使用说明
 
 ### 手动运行
@@ -351,21 +429,34 @@ sudo rm /var/log/mchost_renew.log
 ```
 test_MC/
 ├── mchost_renew.py          # 主程序脚本
+├── local_login.py           # 本地登录工具（生成cookies）
+├── web_viewer.py            # Web监控界面
 ├── config.json              # 配置文件（需要手动创建）
 ├── config.json.example      # 配置文件模板
+├── cookies.json             # 登录会话cookies（自动生成）
 ├── deploy.sh                # 一键部署脚本
-├── install_service.sh       # 服务安装脚本
+├── install_service.sh       # 主服务安装脚本
+├── install_viewer.sh        # Web Viewer服务安装脚本
 ├── mchost-renew.service     # systemd 服务配置
+├── mchost-viewer.service    # Web Viewer 服务配置
 ├── README.md                # 说明文档（本文件）
+├── screenshots/             # Renew截图目录（自动创建）
 └── venv/                    # Python 虚拟环境（自动创建）
 ```
 
 ## 更新日志
 
+### v1.1.0 (2025-11-26)
+- ✨ 新增 Web 监控界面
+- ✅ 支持远程查看 Renew 截图
+- ✅ 支持实时查看日志
+- ✅ 截图自动管理（保留最近50张）
+- ✅ 密码保护访问
+
 ### v1.0.0 (2025-11-26)
 - ✨ 初始版本
-- ✅ 支持自动登录和续期
-- ✅ 支持 Cloudflare 验证
+- ✅ Cookie-based 登录机制
+- ✅ 支持自动续期
 - ✅ 一键部署
 - ✅ systemd 服务支持
 

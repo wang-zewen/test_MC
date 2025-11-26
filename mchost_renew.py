@@ -33,6 +33,9 @@ class MCHostRenewer:
         self.context = None
         self.page = None
         self.cookies_file = Path(__file__).parent / 'cookies.json'
+        self.screenshots_dir = Path(__file__).parent / 'screenshots'
+        # 创建截图目录
+        self.screenshots_dir.mkdir(exist_ok=True)
 
     def _load_config(self, config_path):
         """加载配置文件"""
@@ -255,6 +258,18 @@ class MCHostRenewer:
 
             # 等待一下看是否有反馈
             await asyncio.sleep(2)
+
+            # 保存截图（用于Web查看）
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = self.screenshots_dir / f'renew_{timestamp}.png'
+            await self.page.screenshot(path=str(screenshot_path), full_page=True)
+            logger.info(f"✓ 已保存截图到: {screenshot_path}")
+
+            # 清理旧截图（只保留最近50张）
+            screenshots = sorted(self.screenshots_dir.glob('renew_*.png'), key=os.path.getmtime, reverse=True)
+            for old_screenshot in screenshots[50:]:
+                old_screenshot.unlink()
+                logger.info(f"清理旧截图: {old_screenshot.name}")
 
             return True
         except PlaywrightTimeoutError:
