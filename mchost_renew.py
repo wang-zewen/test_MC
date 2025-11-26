@@ -181,9 +181,67 @@ class MCHostRenewer:
                 logger.error("已保存截图到: /tmp/mchost_no_password.png")
                 raise Exception("无法找到密码输入框")
 
-            # 等待Cloudflare验证（如果登录表单中有）
-            logger.info("等待验证码检查...")
-            await asyncio.sleep(5)
+            # 检查并处理Cloudflare验证框
+            logger.info("检查Cloudflare验证框...")
+            await asyncio.sleep(2)
+
+            # 保存填写完表单后的截图，用于调试
+            await self.page.screenshot(path='/tmp/mchost_before_cf.png', full_page=True)
+            logger.info("已保存表单填写后截图到: /tmp/mchost_before_cf.png")
+
+            # 尝试查找并点击Cloudflare验证框
+            cf_clicked = False
+            cf_selectors = [
+                'iframe[src*="challenges.cloudflare.com"]',
+                'iframe[title*="CloudFlare"]',
+                'iframe[src*="turnstile"]',
+                '.cf-turnstile iframe',
+                '#cf-turnstile iframe'
+            ]
+
+            for selector in cf_selectors:
+                try:
+                    logger.info(f"尝试查找CF iframe: {selector}")
+                    cf_iframe = await self.page.wait_for_selector(selector, timeout=3000, state='visible')
+                    if cf_iframe:
+                        logger.info(f"✓ 找到Cloudflare验证框: {selector}")
+
+                        # 切换到iframe
+                        frame = await cf_iframe.content_frame()
+                        if frame:
+                            # 在iframe中查找复选框
+                            checkbox_selectors = [
+                                'input[type="checkbox"]',
+                                '.cb-i',
+                                '#cf-checkbox',
+                                'span.mark'
+                            ]
+
+                            for cb_selector in checkbox_selectors:
+                                try:
+                                    logger.info(f"尝试点击验证框内的元素: {cb_selector}")
+                                    await frame.click(cb_selector, timeout=2000)
+                                    logger.info(f"✓ 成功点击Cloudflare验证框")
+                                    cf_clicked = True
+                                    break
+                                except:
+                                    continue
+
+                        if cf_clicked:
+                            break
+                except:
+                    continue
+
+            if cf_clicked:
+                # 等待验证完成
+                logger.info("等待Cloudflare验证完成...")
+                await asyncio.sleep(5)
+                await self.page.screenshot(path='/tmp/mchost_after_cf.png', full_page=True)
+                logger.info("已保存验证后截图到: /tmp/mchost_after_cf.png")
+            else:
+                logger.info("未找到Cloudflare验证框，可能不需要或已自动完成")
+                # 再等待一会儿，以防验证框稍后出现
+                await asyncio.sleep(3)
 
             # 查找并点击登录按钮
             login_button_selectors = [
