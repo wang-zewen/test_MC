@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import sys
+import os
 from datetime import datetime
 from pathlib import Path
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
@@ -31,6 +32,7 @@ class MCHostRenewer:
         self.browser = None
         self.context = None
         self.page = None
+        self.cookies_file = Path(__file__).parent / 'cookies.json'
 
     def _load_config(self, config_path):
         """加载配置文件"""
@@ -111,190 +113,120 @@ class MCHostRenewer:
 
         logger.info("浏览器初始化成功")
 
-    async def login(self):
-        """登录MCHost"""
+    async def save_cookies(self):
+        """保存cookies到文件"""
         try:
-            logger.info(f"正在访问登录页面: {self.config['mchost_url']}")
+            cookies = await self.context.cookies()
+            with open(self.cookies_file, 'w', encoding='utf-8') as f:
+                json.dump(cookies, f, indent=2)
+            logger.info(f"✓ Cookies已保存到: {self.cookies_file}")
+            return True
+        except Exception as e:
+            logger.error(f"保存cookies失败: {e}")
+            return False
 
-            # 使用更宽松的加载策略，不等待networkidle
-            try:
-                await self.page.goto(self.config['mchost_url'], wait_until='domcontentloaded', timeout=60000)
-            except PlaywrightTimeoutError:
-                logger.warning("页面加载超时，但继续尝试...")
-
-            # 等待Cloudflare验证完成（如果有）
-            logger.info("等待页面加载完成（可能需要通过Cloudflare验证）...")
-            await asyncio.sleep(10)  # 增加等待时间让Cloudflare完成验证
-
-            # 查找并填写用户名
-            logger.info("正在填写登录信息...")
-            username_selectors = [
-                'input[name="username"]',
-                'input[name="email"]',
-                'input[type="email"]',
-                'input[type="text"]',
-                'input[placeholder*="用户名"]',
-                'input[placeholder*="username"]',
-                'input[placeholder*="email"]',
-                'input[placeholder*="Email"]',
-                '#username',
-                '#email'
-            ]
-
-            username_filled = False
-            for selector in username_selectors:
-                try:
-                    await self.page.wait_for_selector(selector, timeout=5000, state='visible')
-                    await self.page.fill(selector, self.config['username'])
-                    username_filled = True
-                    logger.info(f"✓ 使用选择器填写用户名: {selector}")
-                    break
-                except:
-                    continue
-
-            if not username_filled:
-                # 保存截图用于调试
-                await self.page.screenshot(path='/tmp/mchost_no_username.png')
-                logger.error("已保存截图到: /tmp/mchost_no_username.png")
-                raise Exception("无法找到用户名输入框")
-
-            # 查找并填写密码
-            password_selectors = [
-                'input[name="password"]',
-                'input[type="password"]',
-                '#password'
-            ]
-
-            password_filled = False
-            for selector in password_selectors:
-                try:
-                    await self.page.wait_for_selector(selector, timeout=5000, state='visible')
-                    await self.page.fill(selector, self.config['password'])
-                    password_filled = True
-                    logger.info(f"✓ 使用选择器填写密码: {selector}")
-                    break
-                except:
-                    continue
-
-            if not password_filled:
-                await self.page.screenshot(path='/tmp/mchost_no_password.png')
-                logger.error("已保存截图到: /tmp/mchost_no_password.png")
-                raise Exception("无法找到密码输入框")
-
-            # 检查并处理Cloudflare验证框
-            logger.info("检查Cloudflare验证框...")
-            await asyncio.sleep(2)
-
-            # 保存填写完表单后的截图，用于调试
-            await self.page.screenshot(path='/tmp/mchost_before_cf.png', full_page=True)
-            logger.info("已保存表单填写后截图到: /tmp/mchost_before_cf.png")
-
-            # 尝试查找并点击Cloudflare验证框
-            cf_clicked = False
-            cf_selectors = [
-                'iframe[src*="challenges.cloudflare.com"]',
-                'iframe[title*="CloudFlare"]',
-                'iframe[src*="turnstile"]',
-                '.cf-turnstile iframe',
-                '#cf-turnstile iframe'
-            ]
-
-            for selector in cf_selectors:
-                try:
-                    logger.info(f"尝试查找CF iframe: {selector}")
-                    cf_iframe = await self.page.wait_for_selector(selector, timeout=3000, state='visible')
-                    if cf_iframe:
-                        logger.info(f"✓ 找到Cloudflare验证框: {selector}")
-
-                        # 切换到iframe
-                        frame = await cf_iframe.content_frame()
-                        if frame:
-                            # 在iframe中查找复选框
-                            checkbox_selectors = [
-                                'input[type="checkbox"]',
-                                '.cb-i',
-                                '#cf-checkbox',
-                                'span.mark'
-                            ]
-
-                            for cb_selector in checkbox_selectors:
-                                try:
-                                    logger.info(f"尝试点击验证框内的元素: {cb_selector}")
-                                    await frame.click(cb_selector, timeout=2000)
-                                    logger.info(f"✓ 成功点击Cloudflare验证框")
-                                    cf_clicked = True
-                                    break
-                                except:
-                                    continue
-
-                        if cf_clicked:
-                            break
-                except:
-                    continue
-
-            if cf_clicked:
-                # 等待验证完成
-                logger.info("等待Cloudflare验证完成...")
-                await asyncio.sleep(5)
-                await self.page.screenshot(path='/tmp/mchost_after_cf.png', full_page=True)
-                logger.info("已保存验证后截图到: /tmp/mchost_after_cf.png")
-            else:
-                logger.info("未找到Cloudflare验证框，可能不需要或已自动完成")
-                # 再等待一会儿，以防验证框稍后出现
-                await asyncio.sleep(3)
-
-            # 查找并点击登录按钮
-            login_button_selectors = [
-                'button[type="submit"]',
-                'input[type="submit"]',
-                'button:has-text("登录")',
-                'button:has-text("Login")',
-                'button:has-text("Sign In")',
-                'button:has-text("Sign in")',
-                'button:has-text("Log in")',
-                'button.btn',
-                'input.btn[type="submit"]'
-            ]
-
-            login_clicked = False
-            for selector in login_button_selectors:
-                try:
-                    await self.page.click(selector, timeout=3000)
-                    login_clicked = True
-                    logger.info(f"✓ 点击登录按钮: {selector}")
-                    break
-                except:
-                    continue
-
-            if not login_clicked:
-                await self.page.screenshot(path='/tmp/mchost_no_button.png')
-                logger.error("已保存截图到: /tmp/mchost_no_button.png")
-                raise Exception("无法找到登录按钮")
-
-            # 等待登录完成
-            logger.info("等待登录完成...")
-            await asyncio.sleep(8)
-
-            # 检查是否成功登录（通过查找Renew按钮）
-            try:
-                await self.page.wait_for_selector('#renewSessionBtn', timeout=10000)
-                logger.info("✓ 登录成功！")
-
-                # 保存成功登录后的截图
-                screenshot_path = '/tmp/mchost_login_success.png'
-                await self.page.screenshot(path=screenshot_path, full_page=True)
-                logger.info(f"✓ 已保存登录成功截图到: {screenshot_path}")
-
-                return True
-            except PlaywrightTimeoutError:
-                logger.warning("未找到Renew按钮，可能登录失败")
-                # 保存截图用于调试
-                await self.page.screenshot(path='/tmp/mchost_login_failed.png', full_page=True)
-                logger.info("已保存截图到: /tmp/mchost_login_failed.png")
+    async def load_cookies(self):
+        """从文件加载cookies"""
+        try:
+            if not self.cookies_file.exists():
+                logger.info("未找到cookies文件，需要手动登录")
                 return False
 
+            with open(self.cookies_file, 'r', encoding='utf-8') as f:
+                cookies = json.load(f)
+
+            await self.context.add_cookies(cookies)
+            logger.info("✓ Cookies已加载")
+            return True
         except Exception as e:
-            logger.error(f"登录过程出错: {e}")
+            logger.error(f"加载cookies失败: {e}")
+            return False
+
+    async def check_login_status(self):
+        """检查是否已登录（通过查找Renew按钮）"""
+        try:
+            await self.page.goto(self.config['mchost_url'], wait_until='domcontentloaded', timeout=30000)
+            await asyncio.sleep(3)
+
+            # 查找Renew按钮
+            try:
+                await self.page.wait_for_selector('#renewSessionBtn', timeout=5000, state='visible')
+                logger.info("✓ 已登录状态确认")
+                return True
+            except:
+                logger.info("未检测到登录状态")
+                return False
+        except Exception as e:
+            logger.error(f"检查登录状态失败: {e}")
+            return False
+
+    async def manual_login(self):
+        """手动登录模式 - 等待用户手动完成登录"""
+        try:
+            logger.info("=" * 60)
+            logger.info("手动登录模式")
+            logger.info("=" * 60)
+            logger.info(f"正在打开登录页面: {self.config['mchost_url']}")
+            logger.info("")
+            logger.info("请在打开的浏览器窗口中手动完成以下操作：")
+            logger.info("  1. 填写用户名和密码")
+            logger.info("  2. 完成 Cloudflare 人机验证")
+            logger.info("  3. 点击登录按钮")
+            logger.info("  4. 等待登录成功（看到 Renew 按钮）")
+            logger.info("")
+            logger.info("脚本将自动检测登录状态...")
+            logger.info("=" * 60)
+
+            # 打开登录页面
+            await self.page.goto(self.config['mchost_url'], wait_until='domcontentloaded', timeout=60000)
+
+            # 等待用户手动登录，最多等待 5 分钟
+            max_wait_time = 300  # 5分钟
+            check_interval = 3   # 每3秒检查一次
+            elapsed_time = 0
+
+            while elapsed_time < max_wait_time:
+                await asyncio.sleep(check_interval)
+                elapsed_time += check_interval
+
+                # 检查是否出现了 Renew 按钮（表示登录成功）
+                try:
+                    await self.page.wait_for_selector('#renewSessionBtn', timeout=1000, state='visible')
+                    logger.info("")
+                    logger.info("=" * 60)
+                    logger.info("✓ 检测到登录成功！")
+                    logger.info("=" * 60)
+
+                    # 保存登录成功截图
+                    screenshot_path = '/tmp/mchost_login_success.png'
+                    await self.page.screenshot(path=screenshot_path, full_page=True)
+                    logger.info(f"✓ 已保存登录成功截图到: {screenshot_path}")
+
+                    # 保存 cookies
+                    if await self.save_cookies():
+                        logger.info("✓ 登录会话已保存")
+                        logger.info("✓ 下次运行将自动使用保存的会话，无需再次登录")
+
+                    return True
+                except:
+                    # 还未登录，继续等待
+                    if elapsed_time % 15 == 0:  # 每15秒提示一次
+                        logger.info(f"等待中... ({elapsed_time}/{max_wait_time}秒)")
+                    pass
+
+            # 超时
+            logger.error("")
+            logger.error("=" * 60)
+            logger.error("登录超时！")
+            logger.error(f"已等待 {max_wait_time} 秒，但未检测到登录成功")
+            logger.error("请重新运行脚本并在 5 分钟内完成登录")
+            logger.error("=" * 60)
+            await self.page.screenshot(path='/tmp/mchost_login_timeout.png', full_page=True)
+            logger.info("已保存超时截图到: /tmp/mchost_login_timeout.png")
+            return False
+
+        except Exception as e:
+            logger.error(f"手动登录过程出错: {e}")
             await self.page.screenshot(path='/tmp/mchost_error.png')
             logger.info("已保存错误截图到: /tmp/mchost_error.png")
             return False
@@ -327,37 +259,101 @@ class MCHostRenewer:
     async def run(self):
         """主运行循环"""
         try:
+            # 检查是否需要手动登录（没有cookies文件时使用非headless模式）
+            need_manual_login = not self.cookies_file.exists()
+
+            if need_manual_login:
+                logger.info("首次运行，需要手动登录")
+                logger.info("将打开浏览器窗口...")
+                # 临时设置为非headless模式
+                original_headless = self.config.get('headless', True)
+                self.config['headless'] = False
+
             # 初始化浏览器
             await self.init_browser()
 
-            # 登录
-            if not await self.login():
-                logger.error("登录失败，退出程序")
-                return
+            # 尝试加载cookies
+            logged_in = False
+            if await self.load_cookies():
+                # 检查cookies是否有效
+                logger.info("检查保存的登录会话是否有效...")
+                if await self.check_login_status():
+                    logged_in = True
+                    logger.info("✓ 使用保存的会话登录成功")
+                else:
+                    logger.warning("保存的会话已失效，需要重新登录")
+
+            # 如果cookies无效或不存在，进行手动登录
+            if not logged_in:
+                logger.info("")
+                if need_manual_login:
+                    logger.info("需要手动登录（首次运行或会话失效）")
+                else:
+                    logger.info("会话失效，需要重新登录")
+                    # 如果之前是headless模式，现在需要重新打开非headless浏览器
+                    if self.config.get('headless', True):
+                        logger.info("正在重启浏览器以显示窗口...")
+                        await self.cleanup()
+                        self.config['headless'] = False
+                        await self.init_browser()
+
+                if not await self.manual_login():
+                    logger.error("手动登录失败，退出程序")
+                    return
+
+                # 恢复headless设置
+                if need_manual_login:
+                    self.config['headless'] = original_headless
 
             # 检查是否为测试模式
             test_mode = self.config.get('test_mode', False)
             if test_mode:
-                logger.info("=" * 50)
+                logger.info("")
+                logger.info("=" * 60)
                 logger.info("测试模式：登录成功，即将退出")
                 logger.info("请查看截图: /tmp/mchost_login_success.png")
-                logger.info("确认无误后，将 config.json 中的 test_mode 改为 false")
-                logger.info("=" * 50)
-                await asyncio.sleep(3)  # 等待3秒让用户看到消息
+                logger.info("=" * 60)
+                logger.info("")
+                logger.info("确认登录成功后：")
+                logger.info("1. 将 config.json 中的 test_mode 改为 false")
+                logger.info("2. 再次运行脚本，将自动使用保存的会话")
+                logger.info("3. 后续运行可以使用 headless: true（无窗口模式）")
+                logger.info("=" * 60)
+                await asyncio.sleep(5)
                 return
+
+            # 如果首次登录，提示用户可以关闭浏览器窗口
+            if need_manual_login:
+                logger.info("")
+                logger.info("=" * 60)
+                logger.info("提示：登录会话已保存")
+                logger.info("后续运行将自动使用保存的会话，无需再次登录")
+                logger.info("您可以：")
+                logger.info("  - 将 config.json 中的 headless 改为 true（无窗口模式）")
+                logger.info("  - 或继续使用当前窗口（将保持打开状态）")
+                logger.info("=" * 60)
+                logger.info("")
 
             # 主循环：每15分钟点击一次Renew
             renew_interval = self.config.get('renew_interval_minutes', 15) * 60
             logger.info(f"开始自动续期循环，每 {renew_interval // 60} 分钟执行一次")
+            logger.info("")
 
             while True:
                 # 立即执行一次renew
                 success = await self.click_renew()
 
                 if not success:
-                    logger.warning("Renew失败，尝试重新登录...")
-                    if not await self.login():
-                        logger.error("重新登录失败，等待下一个周期再试")
+                    logger.warning("Renew失败，会话可能已过期")
+                    logger.info("尝试使用保存的cookies重新登录...")
+
+                    # 重新加载页面和cookies
+                    if await self.load_cookies() and await self.check_login_status():
+                        logger.info("✓ 重新登录成功")
+                    else:
+                        logger.error("会话已完全失效")
+                        logger.error("请手动重新运行脚本进行登录")
+                        return
 
                 # 等待指定时间
                 logger.info(f"等待 {renew_interval // 60} 分钟后执行下一次续期...")

@@ -53,69 +53,95 @@ nano config.json
 
 ```json
 {
-  "mchost_url": "https://your-mchost-url.com/login",
-  "username": "your_username",
-  "password": "your_password",
+  "mchost_url": "https://freemchost.com/auth",
   "renew_interval_minutes": 15,
-  "headless": true,
+  "headless": false,
   "test_mode": true
 }
 ```
 
 **配置说明**：
 - `mchost_url`: MCHost 登录页面的完整 URL
-- `username`: 你的 MCHost 用户名
-- `password`: 你的 MCHost 密码
 - `renew_interval_minutes`: 自动续期间隔（分钟），默认 15
-- `headless`: 是否无头模式运行（VPS 上必须为 true）
+- `headless`: 是否无头模式运行（false=显示浏览器窗口，true=无窗口后台运行）
 - `test_mode`: 测试模式（true=只测试登录，false=正式运行）
 
-### 4️⃣ 测试登录
+**注意**：
+- ❌ 不再需要在配置文件中填写用户名和密码！
+- ✅ 首次运行会打开浏览器窗口，你手动登录
+- ✅ 登录后会自动保存会话到 `cookies.json`
+- ✅ 后续运行自动使用保存的会话，无需再次登录
 
-**重要：首次运行请使用测试模式！**
+### 4️⃣ 首次手动登录（重要！）
 
-确保 `config.json` 中 `test_mode` 为 `true`，然后运行：
+**首次运行会打开浏览器窗口，需要你手动登录**
+
+确保 `config.json` 中：
+- `test_mode` 为 `true`（测试模式）
+- `headless` 为 `false`（显示浏览器窗口）
+
+然后运行：
 
 ```bash
 ./venv/bin/python mchost_renew.py
 ```
 
-测试模式下，脚本会：
-1. ✓ 访问登录页面
-2. ✓ 通过 Cloudflare 验证
-3. ✓ 自动登录
-4. ✓ 查找 Renew 按钮
-5. ✓ 保存登录成功截图到 `/tmp/mchost_login_success.png`
-6. ✓ 退出（不进入自动续期循环）
+**接下来会发生什么**：
 
-**查看截图确认登录成功**：
+1. **浏览器窗口会自动打开**，显示 MCHost 登录页面
+2. **在浏览器中手动操作**：
+   - 填写你的用户名和密码
+   - 完成 Cloudflare 人机验证（点击复选框）
+   - 点击登录按钮
+3. **等待登录成功** - 脚本会自动检测
+4. **会话自动保存** - 保存到 `cookies.json`
+5. **截图保存** - `/tmp/mchost_login_success.png`
+6. **测试模式退出** - 确认成功后退出
+
+**重要提示**：
+- ⏱️ 请在 **5 分钟内**完成登录操作
+- 👀 脚本会每 3 秒检测一次登录状态
+- ✅ 看到 "检测到登录成功" 提示即可
+
+**查看登录成功截图**：
 
 ```bash
-# 下载截图到本地查看
+# 在本地电脑运行，下载截图查看
 scp root@your-server-ip:/tmp/mchost_login_success.png ./
-
-# 或者使用其他方式查看
 ```
 
-如果登录失败，检查以下截图进行调试：
-- `/tmp/mchost_error.png` - 整体错误
-- `/tmp/mchost_no_username.png` - 找不到用户名框
-- `/tmp/mchost_no_password.png` - 找不到密码框
-- `/tmp/mchost_no_button.png` - 找不到登录按钮
-- `/tmp/mchost_login_failed.png` - 登录失败
+### 5️⃣ 切换到正式运行模式
 
-**确认登录成功后，切换到正式模式**：
-
-编辑 `config.json`，将 `test_mode` 改为 `false`：
+确认登录成功后，编辑 `config.json`：
 
 ```bash
 nano config.json
-# 修改: "test_mode": false
 ```
 
-然后再次运行，脚本将进入自动续期循环。
+修改以下设置：
 
-### 5️⃣ 安装为系统服务（可选但推荐）
+```json
+{
+  "mchost_url": "https://freemchost.com/auth",
+  "renew_interval_minutes": 15,
+  "headless": true,     // 改为 true（后台运行，不显示窗口）
+  "test_mode": false    // 改为 false（正式运行模式）
+}
+```
+
+再次运行，脚本将：
+- ✅ 自动使用保存的 cookies 登录
+- ✅ 无需手动操作
+- ✅ 每 15 分钟自动点击 Renew 按钮
+- ✅ 后台静默运行
+
+```bash
+./venv/bin/python mchost_renew.py
+```
+
+**如果会话过期**：脚本会提示你重新手动登录，删除 `cookies.json` 后重新运行即可。
+
+### 6️⃣ 安装为系统服务（可选但推荐）
 
 让脚本在后台自动运行并开机自启：
 

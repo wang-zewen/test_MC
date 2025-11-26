@@ -1,5 +1,6 @@
 # 配置文件（包含敏感信息）
 config.json
+cookies.json
 
 # Python虚拟环境
 venv/

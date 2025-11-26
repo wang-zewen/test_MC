@@ -1,8 +1,6 @@
 {
-  "mchost_url": "https://your-mchost-url.com/login",
-  "username": "your_username",
-  "password": "your_password",
+  "mchost_url": "https://freemchost.com/auth",
   "renew_interval_minutes": 15,
-  "headless": true,
+  "headless": false,
   "test_mode": true
 }
