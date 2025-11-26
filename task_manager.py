@@ -330,6 +330,45 @@ class TaskManager:
         for task_id in list(self.processes.keys()):
             self.stop_task(task_id)
 
+    def trigger_action(self, task_id: str, action: str, **kwargs) -> bool:
+        """
+        触发任务操作
+
+        Args:
+            task_id: 任务ID
+            action: 操作类型 (screenshot/renew_now/renew_delayed)
+            **kwargs: 额外参数（如delay_minutes）
+
+        Returns:
+            是否触发成功
+        """
+        task_config = self.get_task_config(task_id)
+        if not task_config:
+            logger.error(f"任务不存在: {task_id}")
+            return False
+
+        task_dir = self.get_task_dir(task_id)
+        trigger_file = task_dir / 'trigger.json'
+
+        trigger_data = {
+            'action': action,
+            'timestamp': datetime.now().isoformat()
+        }
+
+        # 添加额外参数
+        if action == 'renew_delayed' and 'delay_minutes' in kwargs:
+            trigger_data['delay_minutes'] = kwargs['delay_minutes']
+
+        try:
+            with open(trigger_file, 'w', encoding='utf-8') as f:
+                json.dump(trigger_data, f, indent=2)
+
+            logger.info(f"✓ 触发任务操作成功: {task_id} - {action}")
+            return True
+        except Exception as e:
+            logger.error(f"触发任务操作失败: {task_id} - {e}")
+            return False
+
     def run_forever(self):
         """持续运行，监控任务状态"""
         logger.info("任务管理器启动")

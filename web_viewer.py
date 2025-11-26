@@ -160,6 +160,7 @@ TASK_LIST_TEMPLATE = '''
         .btn-secondary { background: #6c757d; color: white; }
         .btn:hover { opacity: 0.9; }
         .btn-sm { padding: 5px 10px; font-size: 12px; margin: 0 2px; }
+        form { margin: 0; }
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -424,7 +425,12 @@ TASK_DETAIL_TEMPLATE = '''
         </div>
 
         <div class="section">
-            <div class="section-title">📸 最近截图</div>
+            <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>📸 最近截图</span>
+                <div>
+                    <a href="{{ url_for('trigger_screenshot', task_id=task.task_id) }}" class="btn btn-primary btn-sm" onclick="return confirm('确定立即截图？')">📷 立即截图</a>
+                </div>
+            </div>
             {% if screenshots|length > 0 %}
             <div class="screenshot-grid">
                 {% for screenshot in screenshots %}
@@ -437,6 +443,30 @@ TASK_DETAIL_TEMPLATE = '''
             {% else %}
             <div class="empty-message">还没有截图</div>
             {% endif %}
+        </div>
+
+        <div class="section">
+            <div class="section-title">⚡ 手动控制</div>
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: end;">
+                <div>
+                    <a href="{{ url_for('trigger_renew_now', task_id=task.task_id) }}" class="btn btn-success" onclick="return confirm('确定立即点击Renew？点击后将重置计时器。')">▶️ 立即Renew</a>
+                </div>
+                <div>
+                    <form method="POST" action="{{ url_for('trigger_renew_delayed', task_id=task.task_id) }}" style="display: flex; gap: 10px; align-items: end;" onsubmit="return confirm('确定设置延迟Renew？')">
+                        <div>
+                            <label for="delay_minutes" style="font-size: 14px; margin-bottom: 5px; display: block;">延迟时间（分钟）</label>
+                            <input type="number" id="delay_minutes" name="delay_minutes" min="1" max="60" value="5" required style="width: 100px; padding: 10px; border: 2px solid #ddd; border-radius: 5px;">
+                        </div>
+                        <button type="submit" class="btn btn-warning">⏱️ 延迟Renew</button>
+                    </form>
+                </div>
+            </div>
+            <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 5px; font-size: 13px; color: #666;">
+                <strong>说明：</strong><br>
+                • <strong>立即Renew</strong>：马上点击Renew按钮，点击后按原设定间隔继续运行<br>
+                • <strong>延迟Renew</strong>：N分钟后点击Renew，点击后按原设定间隔继续运行<br>
+                • 这是人工校正功能，不会改变任务的固定续期间隔
+            </div>
         </div>
 
         <div class="section">
@@ -890,6 +920,31 @@ def delete_task(task_id):
     """删除任务"""
     task_manager.delete_task(task_id)
     return redirect(url_for('index'))
+
+
+@app.route('/task/<task_id>/trigger/screenshot')
+@require_auth
+def trigger_screenshot(task_id):
+    """触发立即截图"""
+    task_manager.trigger_action(task_id, 'screenshot')
+    return redirect(url_for('task_detail', task_id=task_id))
+
+
+@app.route('/task/<task_id>/trigger/renew_now')
+@require_auth
+def trigger_renew_now(task_id):
+    """触发立即Renew"""
+    task_manager.trigger_action(task_id, 'renew_now')
+    return redirect(url_for('task_detail', task_id=task_id))
+
+
+@app.route('/task/<task_id>/trigger/renew_delayed', methods=['POST'])
+@require_auth
+def trigger_renew_delayed(task_id):
+    """触发延迟Renew"""
+    delay_minutes = int(request.form.get('delay_minutes', 5))
+    task_manager.trigger_action(task_id, 'renew_delayed', delay_minutes=delay_minutes)
+    return redirect(url_for('task_detail', task_id=task_id))
 
 
 if __name__ == '__main__':

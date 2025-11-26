@@ -53,6 +53,12 @@ class MCHostRenewer:
         self.context = None
         self.page = None
 
+        # 触发文件（用于外部控制）
+        if task_id:
+            self.trigger_file = self.task_dir / 'trigger.json'
+        else:
+            self.trigger_file = self.base_dir / 'trigger.json'
+
     def _setup_logging(self):
         """配置日志"""
         # 清除现有handlers
@@ -303,6 +309,19 @@ class MCHostRenewer:
             self.logger.info(f"已保存错误截图到: {screenshot_path}")
             return False
 
+    async def take_screenshot(self, prefix='manual'):
+        """拍摄截图"""
+        try:
+            self.logger.info("正在拍摄截图...")
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = self.screenshots_dir / f'{prefix}_{timestamp}.png'
+            await self.page.screenshot(path=str(screenshot_path), full_page=True)
+            self.logger.info(f"✓ 已保存截图到: {screenshot_path}")
+            return str(screenshot_path)
+        except Exception as e:
+            self.logger.error(f"截图失败: {e}")
+            return None
+
     async def click_renew(self):
         """点击Renew按钮"""
         try:
@@ -320,10 +339,7 @@ class MCHostRenewer:
             await asyncio.sleep(2)
 
             # 保存截图（用于Web查看）
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            screenshot_path = self.screenshots_dir / f'renew_{timestamp}.png'
-            await self.page.screenshot(path=str(screenshot_path), full_page=True)
-            self.logger.info(f"✓ 已保存截图到: {screenshot_path}")
+            await self.take_screenshot('renew')
 
             # 清理旧截图（只保留最近50张）
             screenshots = sorted(self.screenshots_dir.glob('renew_*.png'), key=os.path.getmtime, reverse=True)
@@ -340,6 +356,27 @@ class MCHostRenewer:
             screenshot_path = self.screenshots_dir / 'renew_error.png'
             await self.page.screenshot(path=str(screenshot_path))
             return False
+
+    def check_trigger(self):
+        """检查是否有外部触发信号"""
+        if not self.trigger_file.exists():
+            return None
+
+        try:
+            with open(self.trigger_file, 'r', encoding='utf-8') as f:
+                trigger = json.load(f)
+
+            # 删除触发文件
+            self.trigger_file.unlink()
+
+            self.logger.info(f"收到外部触发: {trigger.get('action')}")
+            return trigger
+        except Exception as e:
+            self.logger.error(f"读取触发文件失败: {e}")
+            # 删除损坏的文件
+            if self.trigger_file.exists():
+                self.trigger_file.unlink()
+            return None
 
     async def run(self):
         """主运行循环"""
@@ -449,9 +486,48 @@ class MCHostRenewer:
                             self.logger.error("请手动重新运行脚本进行登录")
                         return
 
-                # 等待指定时间
+                # 等待指定时间，每5秒检查一次触发信号
                 self.logger.info(f"等待 {renew_interval // 60} 分钟后执行下一次续期...")
-                await asyncio.sleep(renew_interval)
+                elapsed = 0
+                check_interval = 5  # 每5秒检查一次
+
+                while elapsed < renew_interval:
+                    await asyncio.sleep(check_interval)
+                    elapsed += check_interval
+
+                    # 检查触发信号
+                    trigger = self.check_trigger()
+                    if trigger:
+                        action = trigger.get('action')
+
+                        if action == 'screenshot':
+                            # 立即截图
+                            self.logger.info("执行立即截图...")
+                            await self.take_screenshot('manual')
+
+                        elif action == 'renew_now':
+                            # 立即点击Renew，然后重置计时器
+                            self.logger.info("执行立即Renew...")
+                            success = await self.click_renew()
+                            if success:
+                                self.logger.info("✓ 手动Renew成功，重置计时器")
+                                break  # 跳出等待循环，重新开始计时
+                            else:
+                                self.logger.error("手动Renew失败")
+
+                        elif action == 'renew_delayed':
+                            # 延迟N分钟后点击Renew
+                            delay_minutes = trigger.get('delay_minutes', 0)
+                            if delay_minutes > 0:
+                                self.logger.info(f"设置延迟 {delay_minutes} 分钟后Renew")
+                                # 修改剩余等待时间
+                                remaining = renew_interval - elapsed
+                                new_wait = delay_minutes * 60
+                                self.logger.info(f"原计划剩余 {remaining // 60} 分钟，调整为 {delay_minutes} 分钟")
+                                # 重新计算elapsed，使得剩余时间=delay_minutes
+                                elapsed = renew_interval - new_wait
+                                if elapsed < 0:
+                                    elapsed = 0
 
         except KeyboardInterrupt:
             self.logger.info("收到退出信号，正在关闭...")
