@@ -136,6 +136,14 @@ class MCHostRenewer:
             with open(self.cookies_file, 'r', encoding='utf-8') as f:
                 cookies = json.load(f)
 
+            # 修正 sameSite 值的格式（首字母大写）
+            for cookie in cookies:
+                if 'sameSite' in cookie:
+                    # 将 "lax", "strict", "none" 转换为 "Lax", "Strict", "None"
+                    same_site = cookie['sameSite']
+                    if isinstance(same_site, str):
+                        cookie['sameSite'] = same_site.capitalize()
+
             await self.context.add_cookies(cookies)
             logger.info("✓ Cookies已加载")
             return True
