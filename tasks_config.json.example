@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "default": {
+      "name": "Default Task",
+      "mchost_url": "https://freemchost.com/dashboard",
+      "renew_interval_minutes": 15,
+      "enabled": true,
+      "created_at": "2025-11-26T00:00:00Z",
+      "last_run": null
+    }
+  }
+}
