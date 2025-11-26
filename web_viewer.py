@@ -719,8 +719,10 @@ def task_detail(task_id):
     screenshots_dir = task_dir / 'screenshots'
     screenshots = []
     if screenshots_dir.exists():
+        # 获取所有截图文件（包括 renew_*.png 和 manual_*.png）
+        all_screenshots = list(screenshots_dir.glob('*.png'))
         screenshot_files = sorted(
-            screenshots_dir.glob('renew_*.png'),
+            all_screenshots,
             key=lambda p: p.stat().st_mtime,
             reverse=True
         )[:20]  # 最近20张
