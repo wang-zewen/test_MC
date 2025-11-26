@@ -360,13 +360,25 @@ class TaskManager:
             trigger_data['delay_minutes'] = kwargs['delay_minutes']
 
         try:
+            logger.info(f"📝 创建触发文件: {trigger_file}")
+            logger.info(f"📝 触发动作: {action}")
+
             with open(trigger_file, 'w', encoding='utf-8') as f:
                 json.dump(trigger_data, f, indent=2)
 
-            logger.info(f"✓ 触发任务操作成功: {task_id} - {action}")
+            # 验证文件是否创建成功
+            if trigger_file.exists():
+                logger.info(f"✓ 触发文件创建成功: {task_id} - {action}")
+                logger.info(f"✓ 文件路径: {trigger_file}")
+                logger.info(f"✓ 文件大小: {trigger_file.stat().st_size} bytes")
+            else:
+                logger.error(f"✗ 触发文件创建失败，文件不存在")
+                return False
+
             return True
         except Exception as e:
             logger.error(f"触发任务操作失败: {task_id} - {e}")
+            logger.error(f"错误详情: {type(e).__name__}: {str(e)}")
             return False
 
     def run_forever(self):
