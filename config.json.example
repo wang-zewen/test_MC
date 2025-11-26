@@ -1,0 +1,7 @@
+{
+  "mchost_url": "https://your-mchost-url.com/login",
+  "username": "your_username",
+  "password": "your_password",
+  "renew_interval_minutes": 15,
+  "headless": true
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=MCHost Auto Renew Service
+After=network.target
+
+[Service]
+Type=simple
+User=%USER%
+WorkingDirectory=%SCRIPT_DIR%
+Environment="PATH=%SCRIPT_DIR%/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=%SCRIPT_DIR%/venv/bin/python %SCRIPT_DIR%/mchost_renew.py
+Restart=always
+RestartSec=60
+StandardOutput=append:/var/log/mchost_renew.log
+StandardError=append:/var/log/mchost_renew.log
+
+[Install]
+WantedBy=multi-user.target
