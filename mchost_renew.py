@@ -36,7 +36,6 @@ class MCHostRenewer:
             self.screenshots_dir.mkdir(exist_ok=True)
             self.cookies_file = self.task_dir / 'cookies.json'
             self.log_file = self.task_dir / 'task.log'
-            self.config = self._load_task_config(task_id)
         # 单任务模式（向后兼容）
         else:
             config_path = config_path or (self.base_dir / 'config.json')
@@ -44,10 +43,15 @@ class MCHostRenewer:
             self.screenshots_dir.mkdir(exist_ok=True)
             self.cookies_file = self.base_dir / 'cookies.json'
             self.log_file = Path('/var/log/mchost_renew.log')
-            self.config = self._load_config(config_path)
 
-        # 配置日志
+        # 配置日志（必须在加载配置之前）
         self._setup_logging()
+
+        # 加载配置
+        if task_id:
+            self.config = self._load_task_config(task_id)
+        else:
+            self.config = self._load_config(config_path)
 
         self.browser = None
         self.context = None
