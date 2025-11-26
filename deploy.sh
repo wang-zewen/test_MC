@@ -37,43 +37,23 @@ $SUDO apt-get update -qq
 echo -e "${GREEN}[3/7]${NC} 安装 Python3 和依赖..."
 $SUDO apt-get install -y python3 python3-pip python3-venv
 
-# 安装Playwright依赖的系统库
-echo -e "${GREEN}[4/7]${NC} 安装 Playwright 系统依赖..."
-$SUDO apt-get install -y \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libxkbcommon0 \
-    libatspi2.0-0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2
-
 # 创建Python虚拟环境
-echo -e "${GREEN}[5/7]${NC} 创建 Python 虚拟环境..."
+echo -e "${GREEN}[4/7]${NC} 创建 Python 虚拟环境..."
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 
 # 激活虚拟环境并安装依赖
-echo -e "${GREEN}[6/7]${NC} 安装 Python 依赖包..."
+echo -e "${GREEN}[5/7]${NC} 安装 Python 依赖包..."
 source venv/bin/activate
-pip install --upgrade pip
+pip install --upgrade pip -q
 pip install playwright
 
-# 安装Playwright浏览器
-echo "安装 Chromium 浏览器（可能需要几分钟）..."
+# 安装Playwright浏览器和系统依赖
+echo -e "${GREEN}[6/7]${NC} 安装 Chromium 浏览器和系统依赖（可能需要几分钟）..."
 playwright install chromium
-playwright install-deps chromium
+echo "正在安装浏览器依赖库..."
+$SUDO playwright install-deps chromium
 
 # 创建配置文件
 echo -e "${GREEN}[7/7]${NC} 配置文件设置..."
