@@ -1,474 +1,484 @@
-# MCHost 自动续期脚本
+# MCHost 多任务自动续期管理系统
 
-自动登录 MCHost 并每隔 15 分钟点击 Renew 按钮，保持服务器在线。
+自动化管理多个 MCHost 服务器，定时点击 Renew 按钮保持在线，提供 Web 管理界面实时监控和手动控制。
 
-## 功能特性
+## ✨ 功能特性
 
-- ✅ 自动登录 MCHost（支持 Cloudflare 人机验证）
-- ✅ 定时自动点击 Renew 按钮（默认 15 分钟）
-- ✅ 失败自动重试机制
-- ✅ 详细日志记录
-- ✅ 后台运行（systemd 服务）
-- ✅ 开机自启动
-- ✅ 一键部署脚本
+### 🎯 核心功能
+- ✅ **多任务管理** - 同时管理多个 MCHost 服务器
+- ✅ **自动续期** - 定时自动点击 Renew 按钮（可自定义间隔）
+- ✅ **Cookie认证** - 无需密码，使用浏览器 Cookie 登录
+- ✅ **失败重试** - 自动检测会话过期并重连
+- ✅ **后台运行** - systemd 服务，开机自启
 
-## 系统要求
+### 🖥️ Web 管理界面
+- ✅ **任务管理** - 创建、编辑、删除、启动、停止任务
+- ✅ **实时监控** - 查看任务状态、运行日志、截图
+- ✅ **手动控制** - 立即截图、立即 Renew、延迟 Renew
+- ✅ **人工校正** - 调整下次点击时间而不改变固定间隔
+- ✅ **密码保护** - 安全访问控制
+- ✅ **快速刷新** - 5秒自动刷新，操作后立即显示结果
+
+### 📸 智能截图
+- ✅ 自动保存每次 Renew 的截图
+- ✅ 支持手动立即截图查看当前状态
+- ✅ 显示最近 20 张截图
+- ✅ Lightbox 全屏查看
+- ✅ 自动清理旧截图（保留50张）
+
+## 🚀 快速开始
+
+### 1️⃣ 系统要求
 
 - **操作系统**: Ubuntu 18.04+ / Debian 10+
-- **Python**: 3.7+
-- **内存**: 至少 512MB RAM（推荐 1GB+）
-- **磁盘**: 至少 500MB 可用空间
-
-## 快速开始
-
-### 1️⃣ 克隆或下载项目
-
-```bash
-# 如果已经在项目目录，跳过此步
-cd /home/user/test_MC
-```
+- **Python**: 3.8+
+- **内存**: 至少 1GB RAM
+- **磁盘**: 至少 1GB 可用空间
 
 ### 2️⃣ 一键部署
 
 ```bash
+# 克隆项目
+git clone <your-repo-url>
+cd test_MC
+
+# 一键部署（安装所有依赖）
 chmod +x deploy.sh
 bash deploy.sh
 ```
 
-部署脚本会自动：
-- 安装 Python3 和依赖
-- 安装 Playwright 和 Chromium 浏览器
+部署脚本会自动安装：
+- Python3 和 pip
+- Playwright 和 Chromium
+- Flask（Web界面）
 - 创建虚拟环境
-- 创建配置文件模板
 
-### 3️⃣ 配置账号信息
+### 3️⃣ 启动 Web 管理界面
 
-编辑 `config.json` 文件：
-
-```bash
-nano config.json
-```
-
-填写以下信息：
-
-```json
-{
-  "mchost_url": "https://freemchost.com/auth",
-  "renew_interval_minutes": 15,
-  "headless": false,
-  "test_mode": true
-}
-```
-
-**配置说明**：
-- `mchost_url`: MCHost 登录页面的完整 URL
-- `renew_interval_minutes`: 自动续期间隔（分钟），默认 15
-- `headless`: 是否无头模式运行（false=显示浏览器窗口，true=无窗口后台运行）
-- `test_mode`: 测试模式（true=只测试登录，false=正式运行）
-
-**注意**：
-- ❌ 不再需要在配置文件中填写用户名和密码！
-- ✅ 首次需要手动登录一次
-- ✅ 登录后会自动保存会话到 `cookies.json`
-- ✅ 后续运行自动使用保存的会话，无需再次登录
-
-### 4️⃣ 首次登录（选择一种方式）
-
-由于 VPS 通常没有图形界面，你需要选择以下方式之一完成首次登录：
-
-#### 🌟 方式A：在本地电脑登录（推荐）
-
-**适用于**：你的本地电脑（Windows/Mac/Linux）有浏览器
-
-1️⃣ **在本地电脑克隆项目**：
-
-```bash
-git clone <your-repo-url>
-cd test_MC
-```
-
-2️⃣ **安装依赖**（只需 playwright）：
-
-```bash
-# 安装 Python 和 pip（如果没有）
-# Windows: 从 python.org 下载安装
-# Mac: brew install python3
-# Linux: sudo apt-get install python3 python3-pip
-
-# 安装 playwright
-pip3 install playwright
-playwright install chromium
-```
-
-3️⃣ **运行本地登录脚本**：
-
-```bash
-python3 local_login.py
-```
-
-脚本会：
-- 打开浏览器窗口
-- 等待你手动登录（填写账号、完成CF验证）
-- 自动检测登录成功
-- 保存 `cookies.json`
-
-4️⃣ **上传 cookies 到服务器**：
-
-```bash
-scp cookies.json root@你的服务器IP:/root/test_MC/
-```
-
-5️⃣ **在服务器上配置并运行**：
-
-```bash
-# SSH 到服务器
-ssh root@你的服务器IP
-
-# 进入项目目录
-cd /root/test_MC
-
-# 修改配置
-nano config.json
-# 设置: "headless": true, "test_mode": false
-
-# 运行脚本
-./venv/bin/python mchost_renew.py
-```
-
-✅ **完成！** 脚本将自动使用 cookies 登录并开始自动续期。
-
----
-
-#### 方式B：在 VPS 上使用虚拟显示（不推荐 - 复杂且看不到窗口）
-
-VPS 没有图形界面，需要使用 xvfb（虚拟显示服务器）：
-
-```bash
-# 安装 xvfb
-sudo apt-get install -y xvfb
-
-# 确保配置
-nano config.json
-# 设置: "headless": false, "test_mode": true
-
-# 使用 xvfb 运行
-xvfb-run -a /root/test_MC/venv/bin/python /root/test_MC/mchost_renew.py
-```
-
-**缺点**：
-- ❌ 你看不到浏览器窗口
-- ❌ 无法人工验证 Cloudflare
-- ❌ 只能通过截图判断状态
-- ❌ 调试困难
-
-⚠️ **强烈建议使用方式A（本地登录）**，更简单可靠。
-
----
-
-### 5️⃣ 切换到正式运行模式
-
-确认登录成功后，编辑 `config.json`：
-
-```bash
-nano config.json
-```
-
-修改以下设置：
-
-```json
-{
-  "mchost_url": "https://freemchost.com/auth",
-  "renew_interval_minutes": 15,
-  "headless": true,     // 改为 true（后台运行，不显示窗口）
-  "test_mode": false    // 改为 false（正式运行模式）
-}
-```
-
-再次运行，脚本将：
-- ✅ 自动使用保存的 cookies 登录
-- ✅ 无需手动操作
-- ✅ 每 15 分钟自动点击 Renew 按钮
-- ✅ 后台静默运行
-
-```bash
-./venv/bin/python mchost_renew.py
-```
-
-**如果会话过期**：脚本会提示你重新手动登录，删除 `cookies.json` 后重新运行即可。
-
-### 6️⃣ 安装为系统服务（可选但推荐）
-
-让脚本在后台自动运行并开机自启：
-
-```bash
-chmod +x install_service.sh
-bash install_service.sh
-```
-
-## Web 监控界面
-
-脚本提供了一个 Web 界面，可以远程查看 Renew 截图和日志。
-
-### 启动 Web Viewer
-
-#### 方式 1: 手动运行（用于测试）
+#### 方式一：手动运行（测试用）
 
 ```bash
 ./venv/bin/python web_viewer.py
 ```
 
-然后访问: `http://你的服务器IP:5000`
-
+访问: `http://你的服务器IP:5000`
 默认密码: `mchost123`
 
-#### 方式 2: 安装为系统服务（推荐）
+#### 方式二：安装为服务（推荐）
 
 ```bash
 chmod +x install_viewer.sh
 bash install_viewer.sh
 ```
 
-安装过程中可以设置自定义密码（直接回车使用默认密码）。
+安装时可设置自定义密码（直接回车使用默认密码）。
 
-### Web Viewer 功能
+### 4️⃣ 创建第一个任务
 
-- 📸 **截图查看**: 自动显示最近 20 张 Renew 截图
-- 📋 **日志查看**: 实时显示最近 100 行日志
-- 🔄 **自动刷新**: 每 30 秒自动刷新页面
-- 🔐 **密码保护**: 防止未授权访问
-- 🖼️ **Lightbox**: 点击截图可全屏查看
+1. **登录 Web 界面**
+   - 访问 `http://你的服务器IP:5000`
+   - 输入密码登录
 
-### 修改 Web Viewer 密码
+2. **获取 Cookies**（在本地电脑操作）
+   - 在浏览器登录 MCHost
+   - 按 F12 打开开发者工具
+   - 切换到"应用程序"或"Application"标签
+   - 左侧找到"Cookie" → 点击你的 MCHost 域名
+   - 复制所有 Cookie（或使用插件导出为 JSON）
 
-**方法 1: 通过环境变量**（推荐）
+3. **创建任务**
+   - 点击"新建任务"
+   - 填写任务信息：
+     - **任务 ID**: 例如 `server1`（只能用小写字母、数字、下划线、连字符）
+     - **任务名称**: 例如 `我的主服务器`
+     - **MCHost URL**: 包含 Renew 按钮的页面 URL
+     - **续期间隔**: 推荐 15 分钟
+     - **Cookies JSON**: 粘贴从浏览器复制的 Cookie JSON
+   - 点击"保存"
 
-编辑服务文件:
-```bash
-sudo nano /etc/systemd/system/mchost-viewer.service
+4. **启动任务**
+   - 在任务列表找到刚创建的任务
+   - 点击"启动"按钮
+   - 任务将开始自动运行
+
+5. **查看运行状态**
+   - 点击"详情"进入任务详情页
+   - 查看最新截图和运行日志
+   - 使用手动控制功能测试
+
+## 📖 使用指南
+
+### Web 界面操作
+
+#### 任务列表页面
+
+- **新建任务**: 点击右上角"新建任务"
+- **查看详情**: 点击任务卡片的"详情"按钮
+- **编辑任务**: 修改任务配置、更新 Cookies
+- **启动/停止**: 控制任务运行状态
+- **重启任务**: 重启正在运行的任务
+- **删除任务**: 永久删除任务（不可恢复）
+
+#### 任务详情页面
+
+**截图区域**
+- 查看最近 20 张截图（按时间倒序）
+- 点击截图可全屏查看
+- 点击"立即截图"按钮实时捕获当前页面
+
+**手动控制面板**
+
+1. **立即 Renew**
+   - 马上点击 Renew 按钮
+   - 点击后重置计时器
+   - 继续按原间隔运行
+
+2. **延迟 Renew**
+   - 设置 N 分钟后点击 Renew
+   - 适用于人工校正时间
+   - 点击后继续按原间隔运行
+   - 例如：设置 4 分钟，4分钟后点击，然后继续每 15 分钟自动点击
+
+**运行日志**
+- 显示最近 100 行日志
+- 彩色高亮（错误、警告、成功）
+- 实时更新
+
+### Cookie 导出方法
+
+#### 方法一：Chrome DevTools（推荐）
+
+1. 在 Chrome 登录 MCHost
+2. 按 F12 打开开发者工具
+3. 切换到"应用程序"(Application) 标签
+4. 左侧 Cookie → 选择你的域名
+5. 手动复制所有字段构造 JSON
+
+JSON 格式示例：
+```json
+[
+  {
+    "name": "session",
+    "value": "your-session-value",
+    "domain": ".freemchost.com",
+    "path": "/",
+    "expires": 1234567890,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  }
+]
 ```
 
-修改这一行:
-```ini
-Environment="VIEWER_PASSWORD=你的新密码"
-```
+#### 方法二：使用浏览器插件
 
-重启服务:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart mchost-viewer
-```
+Chrome/Edge: "EditThisCookie" 或 "Cookie-Editor"
+Firefox: "Cookie Quick Manager"
 
-**方法 2: 启动时指定**
+导出为 JSON 格式即可使用。
 
-```bash
-VIEWER_PASSWORD=你的密码 ./venv/bin/python web_viewer.py
-```
+### 任务配置说明
 
-### Web Viewer 服务管理
+| 配置项 | 说明 | 示例 |
+|--------|------|------|
+| 任务 ID | 唯一标识符，创建后不可修改 | `server1` |
+| 任务名称 | 显示名称，可随时修改 | `我的主服务器` |
+| MCHost URL | 包含 Renew 按钮的页面 URL | `https://freemchost.com/dashboard` |
+| 续期间隔 | 自动点击间隔（分钟） | `15` |
+| Cookies | 登录会话 Cookie（JSON 数组） | 见上方示例 |
+
+### 手动控制使用场景
+
+**场景 1: Cookie 快过期**
+- 使用"立即 Renew"提前续期
+- 避免会话失效导致服务中断
+
+**场景 2: 时间不对**
+- 当前时间：14:37
+- 原计划：15:00 点击
+- 你想改到：14:40 点击
+- 操作：设置"延迟 3 分钟"
+- 结果：14:40 点击，然后 14:55、15:10...
+
+**场景 3: 检查状态**
+- 使用"立即截图"查看当前页面
+- 确认登录状态、Renew 按钮是否正常
+
+## 🔧 服务管理
+
+### Web Viewer 服务
 
 ```bash
 # 查看状态
 sudo systemctl status mchost-viewer
 
-# 启动服务
+# 启动/停止/重启
 sudo systemctl start mchost-viewer
-
-# 停止服务
 sudo systemctl stop mchost-viewer
-
-# 重启服务
 sudo systemctl restart mchost-viewer
 
 # 查看日志
 sudo journalctl -u mchost-viewer -f
+
+# 修改密码
+sudo nano /etc/systemd/system/mchost-viewer.service
+# 修改: Environment="VIEWER_PASSWORD=新密码"
+sudo systemctl daemon-reload
+sudo systemctl restart mchost-viewer
 ```
 
-## 使用说明
+### 任务管理
 
-### 手动运行
+所有任务通过 Web 界面管理，无需手动操作服务。
+
+任务进程由 `task_manager.py` 统一管理：
+- 自动监控任务状态
+- 自动重启崩溃的任务
+- 每 30 秒检查一次
+- 日志位于：`/var/log/mchost_manager.log`
+
+## 📁 文件结构
+
+```
+test_MC/
+├── mchost_renew.py          # 主程序脚本（支持单/多任务）
+├── task_manager.py          # 任务管理器后端
+├── web_viewer.py            # Web 管理界面
+├── local_login.py           # 本地登录工具（可选）
+├── deploy.sh                # 一键部署脚本
+├── install_viewer.sh        # Web 服务安装脚本
+├── mchost-viewer.service    # Web 服务配置
+├── tasks_config.json        # 多任务配置（自动生成）
+├── tasks/                   # 任务数据目录
+│   └── {task_id}/          # 各任务独立目录
+│       ├── cookies.json     # 任务 Cookie
+│       ├── screenshots/     # 任务截图
+│       └── task.log         # 任务日志
+└── venv/                    # Python 虚拟环境
+```
+
+## ⚙️ 高级功能
+
+### 本地登录工具（可选）
+
+如果你有本地电脑环境，可以使用 `local_login.py` 生成 Cookie：
 
 ```bash
-# 在前台运行（用于测试）
+# 在本地电脑
+python3 local_login.py
+```
+
+脚本会：
+1. 打开浏览器窗口
+2. 等待你手动登录
+3. 自动检测登录成功
+4. 保存 `cookies.json`
+
+然后上传到服务器：
+```bash
+scp cookies.json root@服务器IP:/root/test_MC/tasks/任务ID/
+```
+
+### 单任务模式（向后兼容）
+
+如果只需管理一个服务器，可以使用单任务模式：
+
+```bash
+# 创建配置文件
+cp config.json.example config.json
+nano config.json
+
+# 手动运行
 ./venv/bin/python mchost_renew.py
 ```
 
-### 服务管理
-
-安装为服务后，可以使用以下命令：
-
-```bash
-# 查看服务状态
-sudo systemctl status mchost-renew
-
-# 启动服务
-sudo systemctl start mchost-renew
-
-# 停止服务
-sudo systemctl stop mchost-renew
-
-# 重启服务
-sudo systemctl restart mchost-renew
-
-# 禁用开机自启
-sudo systemctl disable mchost-renew
-
-# 启用开机自启
-sudo systemctl enable mchost-renew
+配置文件 `config.json`:
+```json
+{
+  "mchost_url": "https://freemchost.com/dashboard",
+  "renew_interval_minutes": 15,
+  "headless": true,
+  "test_mode": false
+}
 ```
 
-### 查看日志
+需要手动准备 `cookies.json` 文件。
 
-```bash
-# 查看最新日志
-tail -f /var/log/mchost_renew.log
+## ❓ 常见问题
 
-# 查看 systemd 日志
-sudo journalctl -u mchost-renew -f
+### Q: 任务启动后没有响应？
 
-# 查看最近 100 行日志
-sudo journalctl -u mchost-renew -n 100
-```
+**A**: 检查以下几点：
+1. 查看任务日志：进入任务详情页查看日志
+2. 确认 Cookie 是否有效：Cookie 可能已过期
+3. 检查 URL 是否正确：必须是包含 Renew 按钮的页面
+4. 重启任务：点击"重启"按钮
 
-## 常见问题
+### Q: 点击"立即截图"没反应？
 
-### Q: Cloudflare 验证无法通过怎么办？
+**A**:
+1. 等待 3-5 秒后刷新页面（处理需要时间）
+2. 查看任务日志是否有错误信息
+3. 确认任务正在运行（状态显示🟢运行中）
+4. 检查浏览器是否已初始化（查看日志）
 
-**A**: 脚本已经包含了基本的反检测措施，但 Cloudflare 可能仍然会拦截。解决方法：
+### Q: Cookie 如何更新？
 
-1. 增加等待时间（修改脚本中的 `await asyncio.sleep()` 时间）
-2. 尝试在本地（非 VPS）先测试，设置 `headless: false` 查看验证过程
-3. 考虑使用代理 IP（需要修改脚本添加代理配置）
-
-### Q: 脚本运行一段时间后失败怎么办？
-
-**A**: 服务已配置自动重启（`Restart=always`），失败后会在 60 秒后自动重试。
+**A**:
+1. 进入任务详情页
+2. 点击"编辑"按钮
+3. 在 Cookies JSON 框中粘贴新的 Cookie
+4. 点击"保存"
+5. 重启任务使新 Cookie 生效
 
 ### Q: 如何修改续期间隔？
 
-**A**: 编辑 `config.json`，修改 `renew_interval_minutes` 的值（单位：分钟）。
+**A**:
+1. 点击任务的"编辑"按钮
+2. 修改"续期间隔"数值
+3. 保存并重启任务
+
+### Q: 页面刷新太慢？
+
+**A**:
+- 页面每 5 秒自动刷新
+- 可以手动按 F5 刷新
+- 操作后等待 3-5 秒会自动跳转并显示结果
 
 ### Q: 占用多少资源？
 
 **A**:
-- 内存：约 150-300MB（Chromium 浏览器）
-- CPU：空闲时几乎为 0，点击时短暂上升
-- 磁盘：约 200MB（浏览器 + 依赖）
+- 每个任务约 150-300MB 内存（Chromium 浏览器）
+- CPU 空闲时几乎为 0
+- Web 界面约 50MB 内存
+- 建议：2 个任务以下用 1GB RAM，更多任务建议 2GB+
 
-### Q: 安全吗？密码会泄露吗？
-
-**A**:
-- 密码存储在本地 `config.json` 文件中
-- 建议设置文件权限：`chmod 600 config.json`
-- 所有操作都在本地 VPS 执行，不会发送到第三方
-
-### Q: 如何卸载？
+### Q: 如何备份任务数据？
 
 **A**:
 ```bash
-# 停止并删除服务
-sudo systemctl stop mchost-renew
-sudo systemctl disable mchost-renew
-sudo rm /etc/systemd/system/mchost-renew.service
+# 备份配置和 Cookie
+tar -czf mchost_backup.tar.gz tasks_config.json tasks/
+
+# 恢复
+tar -xzf mchost_backup.tar.gz
+```
+
+### Q: 如何完全卸载？
+
+**A**:
+```bash
+# 停止所有服务
+sudo systemctl stop mchost-viewer
+sudo systemctl disable mchost-viewer
+sudo rm /etc/systemd/system/mchost-viewer.service
 sudo systemctl daemon-reload
 
 # 删除项目文件
-cd /home/user
-rm -rf test_MC
+rm -rf /root/test_MC
 
 # 删除日志
-sudo rm /var/log/mchost_renew.log
+sudo rm /var/log/mchost_manager.log
 ```
 
-## 故障排查
+## 🔒 安全建议
 
-### 检查步骤
-
-1. **检查配置文件**
+1. **修改默认密码**
    ```bash
-   cat config.json
+   # 安装时设置密码，或修改服务文件
+   sudo nano /etc/systemd/system/mchost-viewer.service
    ```
 
-2. **检查服务状态**
-   ```bash
-   sudo systemctl status mchost-renew
-   ```
+2. **限制访问 IP**（可选）
+   - 使用防火墙规则限制 5000 端口访问
+   - 或通过 Nginx 反向代理添加 IP 白名单
 
-3. **查看详细日志**
-   ```bash
-   tail -100 /var/log/mchost_renew.log
-   ```
+3. **定期更新 Cookie**
+   - Cookie 可能有有效期
+   - 建议每月更新一次
 
-4. **检查截图**
-   ```bash
-   ls -lh /tmp/mchost_*.png
-   ```
+4. **备份配置文件**
+   - 定期备份 `tasks_config.json` 和 `tasks/` 目录
 
-5. **手动测试**
-   ```bash
-   ./venv/bin/python mchost_renew.py
-   ```
+## 📊 监控和告警
 
-### 常见错误
-
-| 错误信息 | 可能原因 | 解决方法 |
-|---------|---------|---------|
-| `配置文件不存在` | 未创建 config.json | 复制 `config.json.example` 为 `config.json` |
-| `无法找到用户名输入框` | 网页结构变化或 URL 错误 | 检查 `mchost_url` 是否正确 |
-| `登录失败` | 用户名/密码错误 | 检查 `config.json` 中的账号信息 |
-| `找不到Renew按钮` | 未登录成功或页面变化 | 查看截图文件，检查实际页面状态 |
-
-## 技术栈
-
-- **Python 3**: 主要编程语言
-- **Playwright**: 浏览器自动化框架
-- **Chromium**: 无头浏览器
-- **systemd**: Linux 服务管理
-
-## 文件说明
-
-```
-test_MC/
-├── mchost_renew.py          # 主程序脚本
-├── local_login.py           # 本地登录工具（生成cookies）
-├── web_viewer.py            # Web监控界面
-├── config.json              # 配置文件（需要手动创建）
-├── config.json.example      # 配置文件模板
-├── cookies.json             # 登录会话cookies（自动生成）
-├── deploy.sh                # 一键部署脚本
-├── install_service.sh       # 主服务安装脚本
-├── install_viewer.sh        # Web Viewer服务安装脚本
-├── mchost-renew.service     # systemd 服务配置
-├── mchost-viewer.service    # Web Viewer 服务配置
-├── README.md                # 说明文档（本文件）
-├── screenshots/             # Renew截图目录（自动创建）
-└── venv/                    # Python 虚拟环境（自动创建）
+### 查看管理器日志
+```bash
+tail -f /var/log/mchost_manager.log
 ```
 
-## 更新日志
+### 查看任务日志
+```bash
+# 通过 Web 界面查看（推荐）
+# 或直接查看文件
+tail -f /root/test_MC/tasks/任务ID/task.log
+```
+
+### 监控任务状态
+- Web 界面会显示任务运行状态
+- 绿色🟢 = 运行中
+- 红色🔴 = 已停止
+
+## 🎯 最佳实践
+
+1. **命名规范**
+   - 任务 ID 使用描述性名称：`main_server`, `backup_server`
+   - 任务名称用中文方便识别：`主服务器`, `备用服务器`
+
+2. **续期间隔**
+   - 推荐 15 分钟
+   - 不要设置太短（< 5 分钟）可能被检测为异常
+   - 不要设置太长（> 30 分钟）可能超时
+
+3. **定期检查**
+   - 每周查看一次任务状态
+   - 查看截图确认正常运行
+   - 检查日志是否有错误
+
+4. **Cookie 管理**
+   - 保存一份 Cookie 备份
+   - Cookie 失效时可快速恢复
+   - 建议使用浏览器插件管理 Cookie
+
+## 📝 更新日志
+
+### v2.0.0 (2025-11-30)
+- ✨ **多任务管理系统** - 支持管理多个服务器
+- ✨ **Web 管理界面** - 完整的任务 CRUD 操作
+- ✨ **手动触发控制** - 立即截图、立即 Renew、延迟 Renew
+- ✨ **人工校正功能** - 灵活调整下次执行时间
+- ⚡ **快速响应** - 2秒检测间隔，5秒页面刷新
+- 📸 **实时截图** - 随时查看当前页面状态
+- 🎨 **美化界面** - 现代化卡片式设计
+- 🔧 **架构重构** - task_manager 统一管理所有任务
 
 ### v1.1.0 (2025-11-26)
 - ✨ 新增 Web 监控界面
 - ✅ 支持远程查看 Renew 截图
 - ✅ 支持实时查看日志
-- ✅ 截图自动管理（保留最近50张）
-- ✅ 密码保护访问
 
 ### v1.0.0 (2025-11-26)
 - ✨ 初始版本
 - ✅ Cookie-based 登录机制
 - ✅ 支持自动续期
-- ✅ 一键部署
-- ✅ systemd 服务支持
 
-## 许可证
+## 🛠️ 技术栈
+
+- **Python 3.8+** - 主要编程语言
+- **Playwright** - 浏览器自动化
+- **Flask** - Web 框架
+- **Chromium** - 无头浏览器
+- **systemd** - 服务管理
+
+## 📜 许可证
 
 MIT License
 
-## 免责声明
+## ⚠️ 免责声明
 
-本脚本仅供学习和个人使用，使用者需自行承担使用风险。请遵守 MCHost 的服务条款。
+本项目仅供学习和个人使用。使用者需自行承担使用风险，并遵守 MCHost 服务条款。
 
-## 贡献
+## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
