@@ -169,8 +169,38 @@ JSON 格式示例：
   }
 ]
 ```
-
-#### 方法二：使用浏览器插件
+#### 方法二：使用浏览器console
+1. 在 Chrome 登录 MCHost
+2. 按 F12 打开开发者工具
+3. 切换到"控制台"(Colsole) 标签
+4. 手动输入下列命令
+命令:
+```
+// 导出 cookies 为 Playwright 格式
+(async () => {
+  const cookies = await cookieStore.getAll();
+  const playwrightCookies = cookies.map(cookie => ({
+    name: cookie.name,
+    value: cookie.value,
+    domain: cookie.domain || window.location.hostname,
+    path: cookie.path || '/',
+    expires: cookie.expires ? cookie.expires / 1000 : -1,
+    httpOnly: cookie.httpOnly || false,
+    secure: cookie.secure || false,
+    sameSite: cookie.sameSite || 'Lax'
+  }));
+  
+  console.log('复制下面的 cookies 内容：');
+  console.log(JSON.stringify(playwrightCookies, null, 2));
+  
+  // 自动复制到剪贴板
+  const text = JSON.stringify(playwrightCookies, null, 2);
+  navigator.clipboard.writeText(text).then(() => {
+    console.log('✓ Cookies 已复制到剪贴板！');
+  });
+})();
+```
+#### 方法三：使用浏览器插件
 
 Chrome/Edge: "EditThisCookie" 或 "Cookie-Editor"
 Firefox: "Cookie Quick Manager"
