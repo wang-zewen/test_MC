@@ -181,19 +181,66 @@ class MCHostRenewer:
             timezone_id='Asia/Shanghai'
         )
 
-        # 添加stealth脚本
+        # 添加增强的stealth脚本（反Cloudflare检测）
         await self.context.add_init_script("""
+            // 隐藏webdriver标志
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
             });
+
+            // 模拟真实浏览器的plugins
             Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
+                get: () => {
+                    const plugins = [
+                        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+                        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+                        { name: 'Native Client', filename: 'internal-nacl-plugin' }
+                    ];
+                    return plugins;
+                }
             });
+
+            // 模拟真实的语言
             Object.defineProperty(navigator, 'languages', {
-                get: () => ['zh-CN', 'zh', 'en']
+                get: () => ['zh-CN', 'zh', 'en-US', 'en']
             });
-            window.chrome = {
-                runtime: {}
+
+            // 添加chrome对象
+            if (!window.chrome) {
+                window.chrome = {
+                    runtime: {},
+                    loadTimes: function() {},
+                    csi: function() {},
+                    app: {}
+                };
+            }
+
+            // 隐藏自动化控制
+            const originalQuery = window.document.querySelector;
+            window.document.querySelector = function(selector) {
+                if (selector === '[id^="credential_picker_"]') {
+                    return null;
+                }
+                return originalQuery.apply(this, arguments);
+            };
+
+            // 添加权限API
+            const originalQuery2 = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery2(parameters)
+            );
+
+            // 伪造canvas指纹
+            const getImageData = CanvasRenderingContext2D.prototype.getImageData;
+            CanvasRenderingContext2D.prototype.getImageData = function() {
+                const imageData = getImageData.apply(this, arguments);
+                // 添加微小噪声
+                for (let i = 0; i < imageData.data.length; i += 4) {
+                    imageData.data[i] += Math.floor(Math.random() * 3) - 1;
+                }
+                return imageData;
             };
         """)
 
