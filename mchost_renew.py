@@ -83,11 +83,10 @@ class MCHostRenewer:
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
-        # 控制台handler（仅在非多任务模式下）
-        if not self.task_id:
-            console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setFormatter(formatter)
-            logger.addHandler(console_handler)
+        # 控制台handler（总是添加，方便调试）
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
         self.logger = logger
 
