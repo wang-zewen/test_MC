@@ -470,6 +470,33 @@ TASK_DETAIL_TEMPLATE = '''
         </div>
 
         <div class="section">
+            <div class="section-title">🖥️ VNC远程桌面（手动处理Cloudflare验证）</div>
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                <div>
+                    <strong>手动干预模式：</strong>
+                    {% if task.manual_mode %}
+                        <span style="color: green; font-weight: bold;">✓ 已启用</span>
+                        <a href="{{ url_for('toggle_manual_mode', task_id=task.task_id) }}" class="btn btn-warning" style="margin-left: 10px;">关闭手动模式</a>
+                    {% else %}
+                        <span style="color: #999;">未启用</span>
+                        <a href="{{ url_for('toggle_manual_mode', task_id=task.task_id) }}" class="btn btn-primary" style="margin-left: 10px;">启用手动模式</a>
+                    {% endif %}
+                </div>
+                <div>
+                    <a href="http://{{ request.host.split(':')[0] }}:6080/vnc.html" target="_blank" class="btn btn-success">🌐 打开VNC远程桌面</a>
+                </div>
+            </div>
+            <div style="margin-top: 15px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; font-size: 13px; color: #856404;">
+                <strong>⚠️ 关于Cloudflare验证：</strong><br>
+                • Cloudflare验证是专门防止机器人的，自动化脚本很难通过<br>
+                • <strong>启用手动干预模式</strong>后，当遇到CF验证时，脚本会暂停并等待你手动处理<br>
+                • 点击"打开VNC远程桌面"可以在浏览器中看到服务器上的浏览器窗口<br>
+                • 在VNC界面中手动完成CF验证后，脚本会自动继续运行<br>
+                • 注意：启用手动模式后需要重启任务才能生效
+            </div>
+        </div>
+
+        <div class="section">
             <div class="section-title">📋 运行日志（最近100行）</div>
             <div class="log-container">
                 {% if log_lines %}
@@ -955,6 +982,29 @@ def trigger_renew_delayed(task_id):
     task_manager.trigger_action(task_id, 'renew_delayed', delay_minutes=delay_minutes)
     # 等待2秒让后台处理信号
     time.sleep(2)
+    return redirect(url_for('task_detail', task_id=task_id))
+
+
+@app.route('/task/<task_id>/toggle_manual_mode')
+@require_auth
+def toggle_manual_mode(task_id):
+    """切换手动干预模式"""
+    # 读取任务配置
+    tasks_config_path = BASE_DIR / 'tasks_config.json'
+    with open(tasks_config_path, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+
+    if task_id not in config['tasks']:
+        return "任务不存在", 404
+
+    # 切换manual_mode
+    current_mode = config['tasks'][task_id].get('manual_mode', False)
+    config['tasks'][task_id]['manual_mode'] = not current_mode
+
+    # 保存配置
+    with open(tasks_config_path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
     return redirect(url_for('task_detail', task_id=task_id))
 
 

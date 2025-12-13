@@ -142,8 +142,18 @@ class MCHostRenewer:
         """初始化浏览器"""
         self.playwright = await async_playwright().start()
 
-        # 启动浏览器（多任务模式强制使用headless）
-        headless = True if self.task_id else self.config.get('headless', True)
+        # 启动浏览器
+        # 如果启用了manual_mode（手动干预模式），使用headed模式配合VNC
+        manual_mode = self.config.get('manual_mode', False)
+
+        if manual_mode:
+            headless = False
+            # 手动模式下使用DISPLAY环境变量指向VNC显示
+            os.environ.setdefault('DISPLAY', ':99')
+            self.logger.info("🖥️ 手动干预模式已启用 - 浏览器将显示在VNC桌面上")
+        else:
+            # 多任务模式强制使用headless（除非配置了manual_mode）
+            headless = True if self.task_id else self.config.get('headless', True)
 
         self.browser = await self.playwright.chromium.launch(
             headless=headless,
@@ -349,9 +359,32 @@ class MCHostRenewer:
                 cf_challenge = await self.page.query_selector('iframe[src*="challenges.cloudflare.com"]')
                 if cf_challenge:
                     self.logger.warning("⚠️ 检测到 Cloudflare 验证")
-                    self.logger.info("等待 Cloudflare 验证通过...")
-                    # 等待最多 30 秒让 CF 验证自动通过
-                    await asyncio.sleep(30)
+
+                    # 如果启用了手动干预模式，等待用户手动处理
+                    if self.config.get('manual_mode', False):
+                        self.logger.info("🖥️ 手动干预模式 - 请在VNC界面中完成Cloudflare验证")
+                        self.logger.info("   访问: http://服务器IP:6080/vnc.html")
+
+                        # 等待CF验证消失（最多等待5分钟）
+                        max_wait = 300  # 5分钟
+                        waited = 0
+                        while waited < max_wait:
+                            await asyncio.sleep(10)
+                            waited += 10
+                            cf_check = await self.page.query_selector('iframe[src*="challenges.cloudflare.com"]')
+                            if not cf_check:
+                                self.logger.info("✓ Cloudflare验证已通过！")
+                                break
+                            if waited % 30 == 0:
+                                self.logger.info(f"等待中... ({waited}/{max_wait}秒)")
+
+                        if waited >= max_wait:
+                            self.logger.error("❌ Cloudflare验证超时")
+                            return False
+                    else:
+                        # 自动模式：等待30秒看CF是否自动通过
+                        self.logger.info("等待 Cloudflare 自动验证通过...")
+                        await asyncio.sleep(30)
             except:
                 pass
 
