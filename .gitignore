@@ -1,6 +1,10 @@
 # 配置文件（包含敏感信息）
 config.json
 cookies.json
+tasks_config.json
+
+# 任务目录（包含用户数据）
+tasks/
 
 # 截图目录
 screenshots/
