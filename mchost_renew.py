@@ -160,18 +160,34 @@ class MCHostRenewer:
             headless = True if self.task_id else self.config.get('headless', True)
             browser_env = None
 
-        self.browser = await self.playwright.chromium.launch(
-            headless=headless,
-            env=browser_env,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process'
-            ]
-        )
+        # 尝试使用真正的Chrome浏览器，如果没有则回退到Chromium
+        try:
+            self.browser = await self.playwright.chromium.launch(
+                headless=headless,
+                channel="chrome",  # 使用真正的Chrome而不是Chromium
+                env=browser_env,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-blink-features=AutomationControlled'
+                    # 移除 --enable-automation 等自动化特征参数
+                ]
+            )
+            self.logger.info("✓ 使用Chrome浏览器启动")
+        except Exception as e:
+            # 如果Chrome不可用，使用Chromium
+            self.logger.warning(f"Chrome不可用，回退到Chromium: {e}")
+            self.browser = await self.playwright.chromium.launch(
+                headless=headless,
+                env=browser_env,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-blink-features=AutomationControlled'
+                ]
+            )
 
         # 创建上下文，添加反检测配置
         self.context = await self.browser.new_context(
