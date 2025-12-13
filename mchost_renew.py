@@ -147,13 +147,18 @@ class MCHostRenewer:
 
         if manual_mode:
             headless = False
-            # 手动模式下强制设置DISPLAY环境变量指向VNC显示
-            os.environ['DISPLAY'] = ':99'
-            self.logger.info("🖥️ 手动干预模式已启用 - 浏览器将显示在VNC桌面上 (DISPLAY=:99)")
-
-            # 准备环境变量（包含DISPLAY）
-            browser_env = os.environ.copy()
-            browser_env['DISPLAY'] = ':99'
+            # 手动模式下设置环境变量
+            import platform
+            if platform.system() == 'Linux':
+                # Linux: 使用VNC显示
+                os.environ['DISPLAY'] = ':99'
+                self.logger.info("🖥️ 手动干预模式已启用 - 浏览器将显示在VNC桌面上 (DISPLAY=:99)")
+                browser_env = os.environ.copy()
+                browser_env['DISPLAY'] = ':99'
+            else:
+                # Mac/Windows: 使用原生桌面
+                self.logger.info("🖥️ 手动干预模式已启用 - 浏览器将显示在桌面上")
+                browser_env = None
         else:
             # 多任务模式强制使用headless（除非配置了manual_mode）
             headless = True if self.task_id else self.config.get('headless', True)
