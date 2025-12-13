@@ -164,21 +164,33 @@ class MCHostRenewer:
             headless = True if self.task_id else self.config.get('headless', True)
             browser_env = None
 
-        # 尝试使用真正的Chrome浏览器，如果没有则回退到Chromium
+        # 检查是否使用用户的Chrome profile
+        use_user_profile = self.config.get('use_user_profile', False)
+        user_data_dir = self.config.get('chrome_user_data_dir', None)
+
+        # 尝试使用真正的Chrome浏览器
         try:
+            launch_args = [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-blink-features=AutomationControlled'
+            ]
+
+            # 如果使用用户profile
+            if use_user_profile and user_data_dir:
+                launch_args.append(f'--user-data-dir={user_data_dir}')
+                self.logger.info(f"✓ 使用Chrome浏览器（用户profile: {user_data_dir}）")
+                self.logger.warning("⚠️  请确保Chrome已关闭，否则会冲突")
+            else:
+                self.logger.info("✓ 使用Chrome浏览器（临时profile）")
+
             self.browser = await self.playwright.chromium.launch(
                 headless=headless,
-                channel="chrome",  # 使用真正的Chrome而不是Chromium
+                channel="chrome",
                 env=browser_env,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-blink-features=AutomationControlled'
-                    # 移除 --enable-automation 等自动化特征参数
-                ]
+                args=launch_args
             )
-            self.logger.info("✓ 使用Chrome浏览器启动")
         except Exception as e:
             # 如果Chrome不可用，使用Chromium
             self.logger.warning(f"Chrome不可用，回退到Chromium: {e}")
