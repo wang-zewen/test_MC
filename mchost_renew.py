@@ -141,6 +141,33 @@ class MCHostRenewer:
         """初始化浏览器"""
         self.playwright = await async_playwright().start()
 
+        # 检查是否连接到已运行的Chrome（推荐用于Mac）
+        connect_to_chrome = self.config.get('connect_to_existing_chrome', False)
+        chrome_debug_port = self.config.get('chrome_debug_port', 9222)
+
+        if connect_to_chrome:
+            # 连接到已运行的Chrome，在新标签页中操作
+            try:
+                cdp_url = f'http://localhost:{chrome_debug_port}'
+                self.logger.info(f"正在连接到已运行的Chrome (端口 {chrome_debug_port})...")
+                self.browser = await self.playwright.chromium.connect_over_cdp(cdp_url)
+                self.logger.info("✓ 已连接到现有Chrome浏览器，将在新标签页中操作")
+                # 直接使用现有浏览器的默认context
+                contexts = self.browser.contexts
+                if contexts:
+                    self.context = contexts[0]
+                else:
+                    self.context = await self.browser.new_context()
+                self.page = await self.context.new_page()
+                self.page.set_default_timeout(60000)
+                self.logger.info("✓ 浏览器初始化成功")
+                return  # 跳过后面的启动新浏览器逻辑
+            except Exception as e:
+                self.logger.error(f"❌ 无法连接到Chrome: {e}")
+                self.logger.error("请先用调试模式启动Chrome:")
+                self.logger.error(f"  /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port={chrome_debug_port} &")
+                raise
+
         # 启动浏览器
         # 如果启用了manual_mode（手动干预模式），使用headed模式配合VNC
         manual_mode = self.config.get('manual_mode', False)
