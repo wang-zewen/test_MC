@@ -152,12 +152,16 @@ class MCHostRenewer:
                 self.logger.info(f"正在连接到已运行的Chrome (端口 {chrome_debug_port})...")
                 self.browser = await self.playwright.chromium.connect_over_cdp(cdp_url)
                 self.logger.info("✓ 已连接到现有Chrome浏览器，将在新标签页中操作")
-                # 直接使用现有浏览器的默认context
+
+                # 使用现有浏览器的第一个context（包含所有cookies和登录状态）
                 contexts = self.browser.contexts
-                if contexts:
-                    self.context = contexts[0]
-                else:
-                    self.context = await self.browser.new_context()
+                if not contexts:
+                    raise Exception("Chrome没有可用的context，请确保Chrome正常运行")
+
+                self.context = contexts[0]
+                self.logger.info(f"✓ 使用现有context (包含 {len(await self.context.cookies())} 个cookies)")
+
+                # 在新标签页中打开
                 self.page = await self.context.new_page()
                 self.page.set_default_timeout(60000)
                 self.logger.info("✓ 浏览器初始化成功")
@@ -323,6 +327,11 @@ class MCHostRenewer:
     async def load_cookies(self):
         """从文件加载cookies"""
         try:
+            # 如果连接到现有Chrome，跳过cookies加载（使用Chrome现有cookies）
+            if self.config.get('connect_to_existing_chrome', False):
+                self.logger.info("✓ 使用现有Chrome的cookies，跳过加载")
+                return True
+
             if not self.cookies_file.exists():
                 self.logger.info("未找到cookies文件，需要手动登录")
                 return False
@@ -560,57 +569,101 @@ class MCHostRenewer:
     async def run(self):
         """主运行循环"""
         try:
-            # 多任务模式下，cookies必须已存在
-            if self.task_id and not self.cookies_file.exists():
-                self.logger.error("多任务模式下需要先上传 cookies.json 文件")
-                self.logger.error(f"请将 cookies 文件放置在: {self.cookies_file}")
-                return
-
-            # 检查是否需要手动登录（没有cookies文件时使用非headless模式）
-            need_manual_login = not self.cookies_file.exists()
-
-            if need_manual_login:
-                self.logger.info("首次运行，需要手动登录")
-                self.logger.info("将打开浏览器窗口...")
-                # 临时设置为非headless模式
-                original_headless = self.config.get('headless', True)
-                self.config['headless'] = False
-
             # 初始化浏览器
             await self.init_browser()
 
-            # 尝试加载cookies
-            logged_in = False
-            if await self.load_cookies():
-                # 检查cookies是否有效
-                self.logger.info("检查保存的登录会话是否有效...")
-                if await self.check_login_status():
-                    logged_in = True
-                    self.logger.info("✓ 使用保存的会话登录成功")
-                else:
-                    self.logger.warning("保存的会话已失效，需要重新登录")
-
-            # 如果cookies无效或不存在，进行手动登录
-            if not logged_in:
+            # 如果连接到现有Chrome，直接打开页面，让用户手动登录
+            if self.config.get('connect_to_existing_chrome', False):
                 self.logger.info("")
-                if need_manual_login:
-                    self.logger.info("需要手动登录（首次运行或会话失效）")
-                else:
-                    self.logger.info("会话失效，需要重新登录")
-                    # 如果之前是headless模式，现在需要重新打开非headless浏览器
-                    if self.config.get('headless', True):
-                        self.logger.info("正在重启浏览器以显示窗口...")
-                        await self.cleanup()
-                        self.config['headless'] = False
-                        await self.init_browser()
+                self.logger.info("=" * 60)
+                self.logger.info("📱 已在Chrome中打开新标签页")
+                self.logger.info("请在标签页中手动登录 MCHost")
+                self.logger.info("")
+                self.logger.info("登录步骤：")
+                self.logger.info("1. 脚本会自动打开MCHost页面")
+                self.logger.info("2. 如果需要登录，请手动登录")
+                self.logger.info("3. 如果遇到Cloudflare验证，手动完成验证")
+                self.logger.info("4. 登录成功后，脚本将自动开始监测Renew按钮")
+                self.logger.info("=" * 60)
+                self.logger.info("")
 
-                if not await self.manual_login():
-                    self.logger.error("手动登录失败，退出程序")
+                # 直接访问MCHost页面
+                await self.page.goto(self.config['mchost_url'])
+                self.logger.info(f"✓ 已打开页面: {self.config['mchost_url']}")
+
+                # 等待用户手动登录（检测是否有Renew按钮）
+                self.logger.info("等待您手动登录...")
+                logged_in = False
+                for i in range(60):  # 等待最多5分钟
+                    await asyncio.sleep(5)
+                    try:
+                        # 检查是否能找到Renew按钮
+                        renew_btn = await self.page.query_selector('#renewSessionBtn')
+                        if renew_btn:
+                            self.logger.info("✓ 检测到Renew按钮，登录成功！")
+                            logged_in = True
+                            break
+                    except:
+                        pass
+
+                    if (i + 1) % 6 == 0:  # 每30秒提示一次
+                        self.logger.info(f"仍在等待登录... ({(i+1)*5}秒)")
+
+                if not logged_in:
+                    self.logger.error("❌ 超时：未检测到登录成功")
+                    self.logger.error("请确保已登录并能看到Renew按钮")
                     return
 
-                # 恢复headless设置
+            else:
+                # 原有逻辑：使用cookies登录
+                # 多任务模式下，cookies必须已存在
+                if self.task_id and not self.cookies_file.exists():
+                    self.logger.error("多任务模式下需要先上传 cookies.json 文件")
+                    self.logger.error(f"请将 cookies 文件放置在: {self.cookies_file}")
+                    return
+
+                # 检查是否需要手动登录（没有cookies文件时使用非headless模式）
+                need_manual_login = not self.cookies_file.exists()
+
                 if need_manual_login:
-                    self.config['headless'] = original_headless
+                    self.logger.info("首次运行，需要手动登录")
+                    self.logger.info("将打开浏览器窗口...")
+                    # 临时设置为非headless模式
+                    original_headless = self.config.get('headless', True)
+                    self.config['headless'] = False
+
+                # 尝试加载cookies
+                logged_in = False
+                if await self.load_cookies():
+                    # 检查cookies是否有效
+                    self.logger.info("检查保存的登录会话是否有效...")
+                    if await self.check_login_status():
+                        logged_in = True
+                        self.logger.info("✓ 使用保存的会话登录成功")
+                    else:
+                        self.logger.warning("保存的会话已失效，需要重新登录")
+
+                # 如果cookies无效或不存在，进行手动登录
+                if not logged_in:
+                    self.logger.info("")
+                    if need_manual_login:
+                        self.logger.info("需要手动登录（首次运行或会话失效）")
+                    else:
+                        self.logger.info("会话失效，需要重新登录")
+                        # 如果之前是headless模式，现在需要重新打开非headless浏览器
+                        if self.config.get('headless', True):
+                            self.logger.info("正在重启浏览器以显示窗口...")
+                            await self.cleanup()
+                            self.config['headless'] = False
+                            await self.init_browser()
+
+                    if not await self.manual_login():
+                        self.logger.error("手动登录失败，退出程序")
+                        return
+
+                    # 恢复headless设置
+                    if need_manual_login:
+                        self.config['headless'] = original_headless
 
             # 检查是否为测试模式
             test_mode = self.config.get('test_mode', False)
