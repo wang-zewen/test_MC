@@ -26,7 +26,8 @@ sudo $UPDATE_CMD
 
 echo "📦 安装必要的软件包..."
 if [ "$PKG_MANAGER" = "apt-get" ]; then
-    sudo $INSTALL_CMD xvfb x11vnc websockify python3-numpy
+    sudo $INSTALL_CMD xvfb x11vnc websockify python3-numpy \
+        fluxbox xterm fonts-dejavu fonts-liberation
     # 安装noVNC
     if [ ! -d "/opt/noVNC" ]; then
         echo "📦 安装noVNC..."
@@ -34,7 +35,8 @@ if [ "$PKG_MANAGER" = "apt-get" ]; then
         sudo git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify
     fi
 else
-    sudo $INSTALL_CMD xorg-x11-server-Xvfb x11vnc python3-websockify python3-numpy
+    sudo $INSTALL_CMD xorg-x11-server-Xvfb x11vnc python3-websockify python3-numpy \
+        fluxbox xterm dejavu-sans-fonts liberation-fonts
     if [ ! -d "/opt/noVNC" ]; then
         echo "📦 安装noVNC..."
         sudo git clone https://github.com/novnc/noVNC.git /opt/noVNC
@@ -59,6 +61,13 @@ if ! pgrep -x "Xvfb" > /dev/null; then
     sleep 2
 fi
 
+# 检查窗口管理器是否已运行
+if ! pgrep -x "fluxbox" > /dev/null; then
+    echo "启动窗口管理器 Fluxbox..."
+    fluxbox -display :99 &
+    sleep 1
+fi
+
 # 检查x11vnc是否已运行
 if ! pgrep -x "x11vnc" > /dev/null; then
     echo "启动VNC服务器..."
@@ -76,6 +85,7 @@ fi
 echo "✅ VNC环境已启动！"
 echo "   - VNC端口: 5900"
 echo "   - Web访问: http://localhost:6080/vnc.html"
+echo "   - 桌面环境: Fluxbox"
 EOFVNC
 
 chmod +x ~/start_vnc.sh
@@ -87,6 +97,7 @@ cat > ~/stop_vnc.sh << 'EOFSTOP'
 echo "停止VNC环境..."
 pkill -f "websockify.*6080" || true
 pkill x11vnc || true
+pkill fluxbox || true
 pkill Xvfb || true
 echo "✅ VNC环境已停止"
 EOFSTOP
