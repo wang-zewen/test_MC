@@ -147,30 +147,67 @@ class MCHostRenewer:
 
         if connect_to_chrome:
             # 连接到已运行的Chrome，在新标签页中操作
-            try:
-                cdp_url = f'http://localhost:{chrome_debug_port}'
-                self.logger.info(f"正在连接到已运行的Chrome (端口 {chrome_debug_port})...")
-                self.browser = await self.playwright.chromium.connect_over_cdp(cdp_url)
-                self.logger.info("✓ 已连接到现有Chrome浏览器，将在新标签页中操作")
+            cdp_url = f'http://localhost:{chrome_debug_port}'
+            self.logger.info(f"正在连接到已运行的Chrome (端口 {chrome_debug_port})...")
 
-                # 使用现有浏览器的第一个context（包含所有cookies和登录状态）
-                contexts = self.browser.contexts
-                if not contexts:
-                    raise Exception("Chrome没有可用的context，请确保Chrome正常运行")
+            # 添加重试逻辑（Chrome启动需要时间）
+            max_retries = 10
+            retry_delay = 2  # 秒
 
-                self.context = contexts[0]
-                self.logger.info(f"✓ 使用现有context (包含 {len(await self.context.cookies())} 个cookies)")
+            for attempt in range(1, max_retries + 1):
+                try:
+                    # 先检查端口是否可访问
+                    import socket
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(1)
+                    result = sock.connect_ex(('localhost', chrome_debug_port))
+                    sock.close()
 
-                # 在新标签页中打开
-                self.page = await self.context.new_page()
-                self.page.set_default_timeout(60000)
-                self.logger.info("✓ 浏览器初始化成功")
-                return  # 跳过后面的启动新浏览器逻辑
-            except Exception as e:
-                self.logger.error(f"❌ 无法连接到Chrome: {e}")
-                self.logger.error("请先用调试模式启动Chrome:")
-                self.logger.error(f"  /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port={chrome_debug_port} &")
-                raise
+                    if result != 0:
+                        if attempt < max_retries:
+                            self.logger.info(f"端口 {chrome_debug_port} 尚未开放，等待 {retry_delay} 秒... (尝试 {attempt}/{max_retries})")
+                            await asyncio.sleep(retry_delay)
+                            continue
+                        else:
+                            raise Exception(f"端口 {chrome_debug_port} 未开放")
+
+                    # 端口已开放，尝试连接
+                    self.logger.info(f"端口已开放，正在连接... (尝试 {attempt}/{max_retries})")
+                    self.browser = await self.playwright.chromium.connect_over_cdp(cdp_url)
+                    self.logger.info("✓ 已连接到现有Chrome浏览器，将在新标签页中操作")
+
+                    # 使用现有浏览器的第一个context（包含所有cookies和登录状态）
+                    contexts = self.browser.contexts
+                    if not contexts:
+                        raise Exception("Chrome没有可用的context，请确保Chrome正常运行")
+
+                    self.context = contexts[0]
+                    self.logger.info(f"✓ 使用现有context (包含 {len(await self.context.cookies())} 个cookies)")
+
+                    # 在新标签页中打开
+                    self.page = await self.context.new_page()
+                    self.page.set_default_timeout(60000)
+                    self.logger.info("✓ 浏览器初始化成功")
+                    return  # 跳过后面的启动新浏览器逻辑
+
+                except Exception as e:
+                    if attempt < max_retries:
+                        self.logger.info(f"连接失败: {e}")
+                        self.logger.info(f"等待 {retry_delay} 秒后重试... (尝试 {attempt}/{max_retries})")
+                        await asyncio.sleep(retry_delay)
+                    else:
+                        # 最后一次尝试失败，给出详细错误信息
+                        self.logger.error(f"❌ 无法连接到Chrome: {e}")
+                        self.logger.error("")
+                        self.logger.error("请检查以下事项：")
+                        self.logger.error(f"1. 确认已完全关闭Chrome（Activity Monitor中检查）")
+                        self.logger.error(f"2. 用调试模式启动Chrome:")
+                        self.logger.error(f"   /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port={chrome_debug_port} &")
+                        self.logger.error(f"3. 等待几秒后再运行脚本")
+                        self.logger.error("")
+                        self.logger.error("或者运行检查脚本验证端口状态:")
+                        self.logger.error("   ./check_chrome_debug.sh")
+                        raise
 
         # 启动浏览器
         # 如果启用了manual_mode（手动干预模式），使用headed模式配合VNC
