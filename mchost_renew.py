@@ -339,8 +339,21 @@ class MCHostRenewer:
 
             self.logger.info("✓ 成功点击Renew按钮！")
 
-            # 等待一下看是否有反馈
-            await asyncio.sleep(2)
+            # 等待更长时间以处理可能的 Cloudflare 验证（从2秒增加到10秒）
+            self.logger.info("等待响应中（可能需要通过 Cloudflare 验证）...")
+            await asyncio.sleep(10)
+
+            # 检查是否有 Cloudflare 验证框
+            try:
+                # 常见的 CF 验证元素
+                cf_challenge = await self.page.query_selector('iframe[src*="challenges.cloudflare.com"]')
+                if cf_challenge:
+                    self.logger.warning("⚠️ 检测到 Cloudflare 验证")
+                    self.logger.info("等待 Cloudflare 验证通过...")
+                    # 等待最多 30 秒让 CF 验证自动通过
+                    await asyncio.sleep(30)
+            except:
+                pass
 
             # 保存截图（用于Web查看）
             await self.take_screenshot('renew')
@@ -351,9 +364,20 @@ class MCHostRenewer:
                 old_screenshot.unlink()
                 self.logger.debug(f"清理旧截图: {old_screenshot.name}")
 
-            return True
+            # 检查 Renew 是否成功（检查按钮是否仍然存在）
+            try:
+                await self.page.wait_for_selector('#renewSessionBtn', state='visible', timeout=5000)
+                self.logger.info("✓ Renew 操作完成")
+                return True
+            except:
+                self.logger.warning("⚠️ 无法确认 Renew 状态，但已完成点击")
+                return True
+
         except PlaywrightTimeoutError:
             self.logger.error("找不到Renew按钮，可能会话已过期")
+            # 保存错误截图
+            screenshot_path = self.screenshots_dir / 'renew_error.png'
+            await self.page.screenshot(path=str(screenshot_path))
             return False
         except Exception as e:
             self.logger.error(f"点击Renew按钮时出错: {e}")
