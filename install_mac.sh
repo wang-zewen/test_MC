@@ -44,10 +44,13 @@ pip install playwright flask
 echo "✅ Python 依赖安装完成"
 
 echo ""
-echo "📦 步骤 4/5: 安装浏览器..."
-playwright install chromium
-playwright install chrome
-echo "✅ 浏览器安装完成"
+echo "📦 步骤 4/5: 检查Chrome浏览器..."
+if [ -d "/Applications/Google Chrome.app" ]; then
+    echo "✅ 检测到系统Chrome浏览器，将使用系统Chrome"
+else
+    echo "⚠️  未检测到Chrome，请安装Chrome浏览器"
+    echo "   下载地址: https://www.google.com/chrome/"
+fi
 
 echo ""
 echo "📦 步骤 5/5: 创建配置文件..."
@@ -62,7 +65,7 @@ if [ ! -f "tasks_config.json" ]; then
       "mchost_url": "https://freemchost.com/server?id=你的服务器ID",
       "renew_interval_minutes": 15,
       "enabled": true,
-      "manual_mode": false,
+      "manual_mode": true,
       "created_at": "2025-12-13T00:00:00Z"
     }
   }
@@ -117,8 +120,13 @@ echo "   nano tasks_config.json"
 echo "   修改 mchost_url 中的服务器ID"
 echo ""
 echo "3. 启动方式："
-echo "   前台运行(测试): ./start.sh"
-echo "   后台运行:       ./start_background.sh"
+echo "   前台运行(推荐): ./start.sh"
+echo ""
+echo "   💡 启动后浏览器窗口会直接显示在你的Mac屏幕上"
+echo "   💡 遇到CF验证时，你可以直接在Mac上手动点击验证"
+echo "   💡 验证通过后，脚本会自动继续运行"
+echo ""
+echo "   后台运行: ./start_background.sh (验证通过后再用)"
 echo ""
 echo "4. Web 管理界面(可选)："
 echo "   python3 web_viewer.py"
