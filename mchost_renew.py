@@ -262,6 +262,21 @@ class MCHostRenewer:
                 '--disable-blink-features=AutomationControlled'
             ]
 
+            # VNC环境需要额外的渲染参数
+            if manual_mode and browser_env:
+                launch_args.extend([
+                    '--disable-gpu',                    # 禁用GPU加速
+                    '--disable-software-rasterizer',    # 禁用软件光栅化
+                    '--disable-gl-drawing-for-tests',   # 禁用GL绘制
+                    '--disable-accelerated-2d-canvas',  # 禁用2D canvas加速
+                    '--disable-accelerated-video-decode', # 禁用视频解码加速
+                    '--no-first-run',                   # 禁用首次运行
+                    '--no-default-browser-check',       # 禁用默认浏览器检查
+                    '--window-size=1920,1080',          # 设置窗口大小
+                    '--start-maximized'                 # 最大化窗口
+                ])
+                self.logger.info("🖥️ VNC模式：已添加渲染优化参数")
+
             # 如果使用用户profile
             if use_user_profile and user_data_dir:
                 launch_args.append(f'--user-data-dir={user_data_dir}')
@@ -279,15 +294,33 @@ class MCHostRenewer:
         except Exception as e:
             # 如果Chrome不可用，使用Chromium
             self.logger.warning(f"Chrome不可用，回退到Chromium: {e}")
+
+            chromium_args = [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-blink-features=AutomationControlled'
+            ]
+
+            # VNC环境需要额外的渲染参数
+            if manual_mode and browser_env:
+                chromium_args.extend([
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                    '--disable-gl-drawing-for-tests',
+                    '--disable-accelerated-2d-canvas',
+                    '--disable-accelerated-video-decode',
+                    '--no-first-run',
+                    '--no-default-browser-check',
+                    '--window-size=1920,1080',
+                    '--start-maximized'
+                ])
+                self.logger.info("🖥️ VNC模式：已添加渲染优化参数")
+
             self.browser = await self.playwright.chromium.launch(
                 headless=headless,
                 env=browser_env,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-blink-features=AutomationControlled'
-                ]
+                args=chromium_args
             )
 
         # 创建上下文，添加反检测配置
