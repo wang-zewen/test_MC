@@ -254,29 +254,22 @@ class MCHostRenewer:
         user_data_dir = self.config.get('chrome_user_data_dir', None)
 
         # 尝试使用真正的Chrome浏览器
+        # 使用最小化参数，避免被CF检测
         try:
             launch_args = [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-blink-features=AutomationControlled',
-                # 增强反检测
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--disable-site-isolation-trials',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                # 隐藏自动化标志
-                '--exclude-switches=enable-automation',
-                '--disable-automation',
-                '--disable-infobars',
-                # 正常浏览器行为
-                '--enable-features=NetworkService,NetworkServiceInProcess',
-                '--force-color-profile=srgb',
-                '--metrics-recording-only',
-                '--no-first-run',
-                '--enable-audio-service-sandbox',
-                '--disable-component-update'
+                '--exclude-switches=enable-automation'
             ]
+
+            # 不在手动模式添加可疑参数
+            if not manual_mode:
+                launch_args.extend([
+                    '--disable-infobars',
+                    '--no-first-run'
+                ])
 
             # VNC环境需要额外的渲染参数
             if manual_mode and browser_env:
@@ -311,28 +304,20 @@ class MCHostRenewer:
             # 如果Chrome不可用，使用Chromium
             self.logger.warning(f"Chrome不可用，回退到Chromium: {e}")
 
+            # 使用最小化参数
             chromium_args = [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-blink-features=AutomationControlled',
-                # 增强反检测
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--disable-site-isolation-trials',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                # 隐藏自动化标志
-                '--exclude-switches=enable-automation',
-                '--disable-automation',
-                '--disable-infobars',
-                # 正常浏览器行为
-                '--enable-features=NetworkService,NetworkServiceInProcess',
-                '--force-color-profile=srgb',
-                '--metrics-recording-only',
-                '--no-first-run',
-                '--enable-audio-service-sandbox',
-                '--disable-component-update'
+                '--exclude-switches=enable-automation'
             ]
+
+            if not manual_mode:
+                chromium_args.extend([
+                    '--disable-infobars',
+                    '--no-first-run'
+                ])
 
             # VNC环境需要额外的渲染参数
             if manual_mode and browser_env:
