@@ -2,5 +2,27 @@
   "mchost_url": "https://freemchost.com/auth",
   "renew_interval_minutes": 15,
   "headless": false,
-  "test_mode": true
+  "test_mode": true,
+
+  "// === Cloudflare验证解决方案（可选） ===": "",
+  "// 选项1: 使用Capsolver（推荐，商业服务）": "",
+  "cf_solver_type": "capsolver",
+  "capsolver_api_key": "YOUR_CAPSOLVER_API_KEY",
+
+  "// 选项2: 使用FlareSolverr（开源，免费）": "",
+  "// cf_solver_type": "flaresolverr",
+  "// flaresolverr_endpoint": "http://localhost:8191/v1",
+
+  "// === Mac用户专用选项 ===": "",
+  "// 连接到已登录的Chrome浏览器（避免重复登录）": "",
+  "connect_to_existing_chrome": false,
+  "chrome_debug_port": 9222,
+
+  "// === 高级选项 ===": "",
+  "// 手动干预模式（VNC/远程桌面）": "",
+  "manual_mode": false,
+
+  "// 使用系统Chrome的用户profile": "",
+  "use_user_profile": false,
+  "chrome_user_data_dir": "/path/to/chrome/profile"
 }

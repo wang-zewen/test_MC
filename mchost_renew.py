@@ -15,6 +15,13 @@ from datetime import datetime
 from pathlib import Path
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
+# 导入Cloudflare解决方案
+try:
+    from cf_solver import CloudflareSolver
+    CF_SOLVER_AVAILABLE = True
+except ImportError:
+    CF_SOLVER_AVAILABLE = False
+
 
 class MCHostRenewer:
     def __init__(self, task_id=None, config_path=None):
@@ -56,6 +63,16 @@ class MCHostRenewer:
         self.browser = None
         self.context = None
         self.page = None
+
+        # 初始化Cloudflare解决器
+        self.cf_solver = None
+        cf_solver_type = self.config.get('cf_solver_type')
+        if cf_solver_type and CF_SOLVER_AVAILABLE:
+            try:
+                self.cf_solver = CloudflareSolver(cf_solver_type, self.config, self.logger)
+                self.logger.info(f"✓ Cloudflare解决器已启用: {cf_solver_type}")
+            except Exception as e:
+                self.logger.warning(f"初始化Cloudflare解决器失败: {e}")
 
         # 触发文件（用于外部控制）
         if task_id:
@@ -481,6 +498,84 @@ class MCHostRenewer:
             self.logger.info(f"已保存错误截图到: {screenshot_path}")
             return False
 
+    async def _handle_cloudflare_challenge(self) -> bool:
+        """
+        处理Cloudflare验证
+
+        Returns:
+            True if solved, False otherwise
+        """
+        try:
+            # 检测Turnstile验证框
+            turnstile_widget = await self.page.query_selector('[data-sitekey]')
+            if turnstile_widget:
+                site_key = await turnstile_widget.get_attribute('data-sitekey')
+                if site_key:
+                    self.logger.info(f"检测到Turnstile验证 (site_key: {site_key[:20]}...)")
+
+                    # 使用解决器获取token
+                    token = await self.cf_solver.solve_turnstile(
+                        page_url=self.page.url,
+                        site_key=site_key
+                    )
+
+                    if token:
+                        # 注入token到页面
+                        await self.page.evaluate(f'''
+                            () => {{
+                                const input = document.querySelector('[name="cf-turnstile-response"]');
+                                if (input) {{
+                                    input.value = '{token}';
+                                }}
+                            }}
+                        ''')
+                        await asyncio.sleep(2)
+                        return True
+
+            # 如果是FlareSolverr，可以尝试获取cookies
+            elif self.cf_solver.solver_type == 'flaresolverr':
+                self.logger.info("使用FlareSolverr获取cookies...")
+                cookies = await self.cf_solver.get_cookies_from_flaresolverr(self.page.url)
+                if cookies:
+                    # 添加cookies到context
+                    await self.context.add_cookies(cookies)
+                    # 刷新页面
+                    await self.page.reload()
+                    await asyncio.sleep(3)
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.logger.error(f"处理Cloudflare验证失败: {e}")
+            return False
+
+    async def _wait_for_manual_cf_solve(self) -> bool:
+        """
+        等待用户手动解决Cloudflare验证
+
+        Returns:
+            True if solved, False if timeout
+        """
+        self.logger.info("🖥️ 手动干预模式 - 请在VNC界面中完成Cloudflare验证")
+        self.logger.info("   访问: http://服务器IP:6080/vnc.html")
+
+        # 等待CF验证消失（最多等待5分钟）
+        max_wait = 300  # 5分钟
+        waited = 0
+        while waited < max_wait:
+            await asyncio.sleep(10)
+            waited += 10
+            cf_check = await self.page.query_selector('iframe[src*="challenges.cloudflare.com"]')
+            if not cf_check:
+                self.logger.info("✓ Cloudflare验证已通过！")
+                return True
+            if waited % 30 == 0:
+                self.logger.info(f"等待中... ({waited}/{max_wait}秒)")
+
+        self.logger.error("❌ Cloudflare验证超时")
+        return False
+
     async def take_screenshot(self, prefix='manual'):
         """拍摄截图"""
         try:
@@ -518,26 +613,18 @@ class MCHostRenewer:
                 if cf_challenge:
                     self.logger.warning("⚠️ 检测到 Cloudflare 验证")
 
+                    # 尝试使用Cloudflare解决器
+                    if self.cf_solver:
+                        if await self._handle_cloudflare_challenge():
+                            self.logger.info("✓ Cloudflare验证已自动解决！")
+                        else:
+                            self.logger.warning("⚠️ 自动解决失败，尝试其他方法...")
+                            # 回退到手动模式
+                            if not await self._wait_for_manual_cf_solve():
+                                return False
                     # 如果启用了手动干预模式，等待用户手动处理
-                    if self.config.get('manual_mode', False):
-                        self.logger.info("🖥️ 手动干预模式 - 请在VNC界面中完成Cloudflare验证")
-                        self.logger.info("   访问: http://服务器IP:6080/vnc.html")
-
-                        # 等待CF验证消失（最多等待5分钟）
-                        max_wait = 300  # 5分钟
-                        waited = 0
-                        while waited < max_wait:
-                            await asyncio.sleep(10)
-                            waited += 10
-                            cf_check = await self.page.query_selector('iframe[src*="challenges.cloudflare.com"]')
-                            if not cf_check:
-                                self.logger.info("✓ Cloudflare验证已通过！")
-                                break
-                            if waited % 30 == 0:
-                                self.logger.info(f"等待中... ({waited}/{max_wait}秒)")
-
-                        if waited >= max_wait:
-                            self.logger.error("❌ Cloudflare验证超时")
+                    elif self.config.get('manual_mode', False):
+                        if not await self._wait_for_manual_cf_solve():
                             return False
                     else:
                         # 自动模式：等待30秒看CF是否自动通过

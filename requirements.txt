@@ -1,0 +1,8 @@
+# 核心依赖
+playwright>=1.40.0
+
+# Cloudflare解决方案依赖
+aiohttp>=3.9.0
+
+# Web界面依赖（可选）
+flask>=3.0.0
