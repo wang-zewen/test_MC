@@ -583,6 +583,58 @@ class MCHostRenewer:
             self.logger.error(f"处理Cloudflare验证失败: {e}")
             return False
 
+    async def _diagnose_cf_state(self) -> None:
+        """诊断当前CF验证状态（用于调试）"""
+        try:
+            self.logger.info("=== CF状态诊断 ===")
+
+            # 检查所有可能的CF元素
+            cf_selectors = {
+                'CF iframe': 'iframe[src*="challenges.cloudflare.com"]',
+                'CF iframe (通用)': 'iframe[src*="cloudflare"]',
+                'CF wrapper': '#cf-wrapper',
+                'CF verification': '.cf-browser-verification',
+                'CF elements': '[id^="cf-"]',
+                'Turnstile': '[data-sitekey]'
+            }
+
+            for name, selector in cf_selectors.items():
+                element = await self.page.query_selector(selector)
+                if element:
+                    try:
+                        is_visible = await element.is_visible()
+                        self.logger.info(f"  {name}: 存在 (可见: {is_visible})")
+                    except:
+                        self.logger.info(f"  {name}: 存在 (可见性未知)")
+                else:
+                    self.logger.info(f"  {name}: 不存在")
+
+            # 检查页面URL和标题
+            current_url = self.page.url
+            try:
+                page_title = await self.page.title()
+            except:
+                page_title = "无法获取"
+
+            self.logger.info(f"  当前URL: {current_url}")
+            self.logger.info(f"  页面标题: {page_title}")
+
+            # 检查是否有错误信息
+            error_selectors = ['.error', '.alert', '[role="alert"]']
+            for selector in error_selectors:
+                error_elem = await self.page.query_selector(selector)
+                if error_elem:
+                    try:
+                        error_text = await error_elem.text_content()
+                        self.logger.info(f"  错误信息: {error_text[:100]}")
+                    except:
+                        pass
+
+            self.logger.info("===================")
+
+        except Exception as e:
+            self.logger.error(f"诊断CF状态时出错: {e}")
+
     async def _wait_for_manual_cf_solve(self) -> bool:
         """
         等待用户手动解决Cloudflare验证
@@ -592,21 +644,95 @@ class MCHostRenewer:
         """
         self.logger.info("🖥️ 手动干预模式 - 请在VNC界面中完成Cloudflare验证")
         self.logger.info("   访问: http://服务器IP:6080/vnc.html")
+        self.logger.info("   提示: 请直接在VNC浏览器窗口中点击CF验证框")
+
+        # 先截图看当前状态
+        await self.take_screenshot('cf_manual_start')
+
+        # 设置页面为非自动化模式，避免干扰手动操作
+        try:
+            await self.page.evaluate("""
+                () => {
+                    // 移除webdriver标志（如果CF检测到会失败）
+                    delete navigator.webdriver;
+                    // 停止页面上的自动化标记
+                    window.__playwright_manual_mode = true;
+                }
+            """)
+        except:
+            pass
 
         # 等待CF验证消失（最多等待5分钟）
         max_wait = 300  # 5分钟
         waited = 0
+        check_interval = 3  # 改为3秒检查一次，提高响应速度
+        last_diagnostic = 0  # 上次诊断的时间
+
         while waited < max_wait:
-            await asyncio.sleep(10)
-            waited += 10
-            cf_check = await self.page.query_selector('iframe[src*="challenges.cloudflare.com"]')
-            if not cf_check:
-                self.logger.info("✓ Cloudflare验证已通过！")
-                return True
-            if waited % 30 == 0:
+            await asyncio.sleep(check_interval)
+            waited += check_interval
+
+            # 多种方式检查CF是否已解决
+            cf_selectors = [
+                'iframe[src*="challenges.cloudflare.com"]',
+                'iframe[src*="cloudflare"]',
+                '#cf-wrapper',
+                '.cf-browser-verification',
+                '[id^="cf-"]'
+            ]
+
+            cf_found = False
+            for selector in cf_selectors:
+                cf_check = await self.page.query_selector(selector)
+                if cf_check:
+                    # 检查元素是否可见
+                    try:
+                        is_visible = await cf_check.is_visible()
+                        if is_visible:
+                            cf_found = True
+                            break
+                    except:
+                        pass
+
+            if not cf_found:
+                # CF元素已消失，等待2秒确认页面稳定
+                self.logger.info("检测到CF元素已消失，等待页面稳定...")
+                await asyncio.sleep(2)
+
+                # 再次检查确保不是瞬时状态
+                cf_recheck = False
+                for selector in cf_selectors:
+                    cf_check = await self.page.query_selector(selector)
+                    if cf_check:
+                        try:
+                            if await cf_check.is_visible():
+                                cf_recheck = True
+                                break
+                        except:
+                            pass
+
+                if not cf_recheck:
+                    self.logger.info("✓ Cloudflare验证已通过！")
+                    # 截图确认
+                    await self.take_screenshot('cf_manual_solved')
+                    # 等待额外2秒让页面完全加载
+                    await asyncio.sleep(2)
+                    return True
+                else:
+                    self.logger.warning("CF元素重新出现，继续等待...")
+
+            # 每30秒输出详细诊断
+            if waited - last_diagnostic >= 30:
+                self.logger.info(f"等待中... ({waited}/{max_wait}秒)")
+                await self._diagnose_cf_state()
+                await self.take_screenshot(f'cf_manual_wait_{waited}')
+                last_diagnostic = waited
+            elif waited % 15 == 0:
                 self.logger.info(f"等待中... ({waited}/{max_wait}秒)")
 
         self.logger.error("❌ Cloudflare验证超时")
+        await self._diagnose_cf_state()
+        await self.take_screenshot('cf_manual_timeout')
         return False
 
     async def take_screenshot(self, prefix='manual'):
@@ -641,19 +767,49 @@ class MCHostRenewer:
 
             # 检查是否有 Cloudflare 验证框
             try:
-                # 常见的 CF 验证元素
-                cf_challenge = await self.page.query_selector('iframe[src*="challenges.cloudflare.com"]')
-                if cf_challenge:
+                # 多种CF验证元素选择器
+                cf_selectors = [
+                    'iframe[src*="challenges.cloudflare.com"]',
+                    'iframe[src*="cloudflare"]',
+                    '#cf-wrapper',
+                    '.cf-browser-verification',
+                    '[id^="cf-"]',
+                    '[data-sitekey]'  # Turnstile
+                ]
+
+                cf_challenge_found = False
+                for selector in cf_selectors:
+                    cf_element = await self.page.query_selector(selector)
+                    if cf_element:
+                        try:
+                            if await cf_element.is_visible():
+                                cf_challenge_found = True
+                                break
+                        except:
+                            pass
+
+                if cf_challenge_found:
                     self.logger.warning("⚠️ 检测到 Cloudflare 验证")
+
+                    # 诊断CF状态
+                    await self._diagnose_cf_state()
 
                     # 尝试使用Cloudflare解决器
                     if self.cf_solver:
+                        self.logger.info("尝试使用自动解决器...")
                         if await self._handle_cloudflare_challenge():
                             self.logger.info("✓ Cloudflare验证已自动解决！")
+                            # 等待3秒让页面完全加载
+                            await asyncio.sleep(3)
                         else:
-                            self.logger.warning("⚠️ 自动解决失败，尝试其他方法...")
+                            self.logger.warning("⚠️ 自动解决失败，切换到手动模式")
                             # 回退到手动模式
-                            if not await self._wait_for_manual_cf_solve():
+                            if self.config.get('manual_mode', False):
+                                if not await self._wait_for_manual_cf_solve():
+                                    self.logger.error("❌ 手动验证也失败了")
+                                    return False
+                            else:
+                                self.logger.warning("未启用manual_mode，无法手动处理")
                                 return False
                     # 如果启用了手动干预模式，等待用户手动处理
                     elif self.config.get('manual_mode', False):
@@ -663,8 +819,25 @@ class MCHostRenewer:
                         # 自动模式：等待30秒看CF是否自动通过
                         self.logger.info("等待 Cloudflare 自动验证通过...")
                         await asyncio.sleep(30)
-            except:
-                pass
+
+                        # 再次检查CF是否还在
+                        still_blocked = False
+                        for selector in cf_selectors:
+                            cf_element = await self.page.query_selector(selector)
+                            if cf_element:
+                                try:
+                                    if await cf_element.is_visible():
+                                        still_blocked = True
+                                        break
+                                except:
+                                    pass
+
+                        if still_blocked:
+                            self.logger.error("❌ Cloudflare验证仍未通过")
+                            await self.take_screenshot('cf_blocked')
+                            return False
+            except Exception as e:
+                self.logger.error(f"检查Cloudflare验证时出错: {e}")
 
             # 保存截图（用于Web查看）
             await self.take_screenshot('renew')
